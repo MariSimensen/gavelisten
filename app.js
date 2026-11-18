@@ -1354,12 +1354,77 @@
   // never send pointerup after a long press.
   let drag = null, suppressClick = false;
   function clearGhosts() { document.querySelectorAll(".chip.ghost").forEach(g => g.remove()); document.body.classList.remove("chip-dragging"); }
-  function moveGhost(x, y) { drag.ghost.style.transform = "translate(" + (x - drag.offX) + "px," + (y - drag.offY) + "px) scale(1.06)"; }
+  function moveGhost(x, y) { drag.ghost.style.transform = "translate3d(" + (x - drag.offX) + "px," + (y - drag.offY) + "px,0) scale(1.06)"; }
+
+  // Moves chips with a short slide instead of a jump: remember where every chip
+  // was, change the DOM, then animate each chip from its old spot to its new one.
+  function flip(mutate) {
+    const chips = [...els.filters.querySelectorAll(".chip")];
+    const before = new Map(chips.map(c => [c, c.getBoundingClientRect()]));
+    mutate();
+    const moved = [];
+    for (const c of chips) {
+      const a = before.get(c), b = c.getBoundingClientRect();
+      const dx = a.left - b.left, dy = a.top - b.top;
+      if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) continue;
+      c.style.transition = "none";
+      c.style.transform = "translate(" + dx + "px," + dy + "px)";
+      moved.push(c);
+    }
+    if (!moved.length) return;
+    void els.filters.offsetWidth; // apply the start position before animating
+    for (const c of moved) {
+      c.style.transition = "transform .18s cubic-bezier(.2,.7,.3,1)";
+      c.style.transform = "";
+      c.addEventListener("transitionend", () => { c.style.transition = ""; }, { once: true });
+    }
+  }
+
+  // Where the dragged chip belongs for a pointer at (x, y). Uses layout
+  // positions (offsetLeft/Top), which ignore the slide animations, and leaves
+  // the dragged chip out, so the answer does not flip back and forth.
+  function dropTarget(x, y) {
+    const box = els.filters, br = box.getBoundingClientRect();
+    const others = [...box.querySelectorAll(".chip[data-pid]")].filter(c => c !== drag.chip);
+    if (!others.length) return null;
+    const px = x - br.left + box.scrollLeft, py = y - br.top + box.scrollTop;
+    // Pick the row under the pointer (or the nearest one).
+    let rowTop = null, best = Infinity;
+    for (const c of others) {
+      const mid = c.offsetTop + c.offsetHeight / 2, d = Math.abs(py - mid);
+      if (d < best - 1) { best = d; rowTop = c.offsetTop; }
+    }
+    const row = others.filter(c => Math.abs(c.offsetTop - rowTop) < 4);
+    const before = row.find(c => px < c.offsetLeft + c.offsetWidth / 2);
+    return { ref: before || row[row.length - 1].nextSibling };
+  }
+  function placeAt(x, y) {
+    const t = dropTarget(x, y);
+    if (!t || t.ref === drag.chip || t.ref === drag.chip.nextSibling) return;
+    flip(() => els.filters.insertBefore(drag.chip, t.ref));
+  }
+
+  // While dragging near the ends of a sideways-scrolling row, keep scrolling
+  // even when the finger holds still.
+  function autoScroll() {
+    if (!drag || !drag.active) return;
+    const box = els.filters, r = box.getBoundingClientRect(), edge = 36;
+    let v = 0;
+    if (drag.x < r.left + edge) v = -Math.ceil((r.left + edge - drag.x) / 6);
+    else if (drag.x > r.right - edge) v = Math.ceil((drag.x - (r.right - edge)) / 6);
+    if (v && box.scrollWidth > box.clientWidth) {
+      const prev = box.scrollLeft;
+      box.scrollLeft += v;
+      if (box.scrollLeft !== prev) placeAt(drag.x, drag.y);
+    }
+    drag.raf = requestAnimationFrame(autoScroll);
+  }
+
   function startDrag(x, y) {
     if (!drag || drag.active) return;
     drag.active = true; S.dragging = true;
     const r = drag.chip.getBoundingClientRect();
-    drag.offX = x - r.left; drag.offY = y - r.top;
+    drag.offX = x - r.left; drag.offY = y - r.top; drag.x = x; drag.y = y;
     clearGhosts();
     const g = drag.chip.cloneNode(true); g.classList.add("ghost"); g.removeAttribute("data-pid"); g.style.width = r.width + "px";
     g.setAttribute("aria-hidden", "true");
@@ -1367,18 +1432,20 @@
     drag.chip.classList.add("dragging"); document.body.classList.add("chip-dragging");
     try { drag.chip.setPointerCapture(drag.pointerId); } catch {}
     try { if (navigator.vibrate) navigator.vibrate(15); } catch {}
+    drag.raf = requestAnimationFrame(autoScroll);
   }
   els.filters.addEventListener("pointerdown", e => {
     if (drag) endDrag(drag.active);
     clearGhosts();
     const chip = e.target.closest(".chip[data-pid]");
     if (!chip || !S.sb || (e.pointerType === "mouse" && e.button !== 0)) return;
-    drag = { id: chip.dataset.pid, chip, pointerId: e.pointerId, sx: e.clientX, sy: e.clientY, active: false, touch: e.pointerType !== "mouse" };
-    if (drag.touch) { const x = e.clientX, y = e.clientY; drag.timer = setTimeout(() => startDrag(x, y), 400); }
+    drag = { id: chip.dataset.pid, chip, pointerId: e.pointerId, sx: e.clientX, sy: e.clientY, x: e.clientX, y: e.clientY, active: false, touch: e.pointerType !== "mouse" };
+    if (drag.touch) { const x = e.clientX, y = e.clientY; drag.timer = setTimeout(() => startDrag(drag ? drag.x : x, drag ? drag.y : y), 350); }
   });
   els.filters.addEventListener("contextmenu", e => { if (e.target.closest(".chip[data-pid]")) e.preventDefault(); });
   document.addEventListener("pointermove", e => {
     if (!drag || e.pointerId !== drag.pointerId) return;
+    drag.x = e.clientX; drag.y = e.clientY;
     const dist = Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy);
     if (!drag.active) {
       if (drag.touch) { if (dist > 10) { clearTimeout(drag.timer); drag = null; } return; }
@@ -1387,33 +1454,32 @@
     }
     e.preventDefault();
     moveGhost(e.clientX, e.clientY);
-    const fr = els.filters.getBoundingClientRect();
-    if (e.clientX < fr.left + 28) els.filters.scrollLeft -= 10;
-    else if (e.clientX > fr.right - 28) els.filters.scrollLeft += 10;
-    drag.ghost.style.display = "none";
-    const under = document.elementFromPoint(e.clientX, e.clientY);
-    drag.ghost.style.display = "";
-    const over = under && under.closest(".chip[data-pid]");
-    if (over && over !== drag.chip && over.parentNode === drag.chip.parentNode) {
-      const r = over.getBoundingClientRect();
-      const after = e.clientX > r.left + r.width / 2;
-      const ref = after ? over.nextSibling : over;
-      if (ref !== drag.chip) over.parentNode.insertBefore(drag.chip, ref);
-    }
+    placeAt(e.clientX, e.clientY);
   }, { passive: false });
   document.addEventListener("touchmove", e => { if (drag && drag.active) e.preventDefault(); }, { passive: false });
   function endDrag(commit) {
     if (!drag) return;
     clearTimeout(drag.timer);
+    cancelAnimationFrame(drag.raf);
     const d = drag; drag = null;
     if (!d.active) return;
     suppressClick = true; setTimeout(() => { suppressClick = false; }, 80);
-    if (d.ghost) d.ghost.remove();
-    clearGhosts(); d.chip.classList.remove("dragging");
+    document.body.classList.remove("chip-dragging");
     S.dragging = false;
     const ids = [...els.filters.querySelectorAll(".chip[data-pid]")].map(c => c.dataset.pid);
-    els.filters.dataset.sig = "";
-    if (commit) saveOrder(ids); else render();
+    // Let the floating copy glide into the chip's new spot, then remove it.
+    const g = d.ghost, r = d.chip.getBoundingClientRect();
+    const finish = () => {
+      if (g) g.remove();
+      d.chip.classList.remove("dragging");
+      els.filters.dataset.sig = "";
+      if (commit) saveOrder(ids); else render();
+    };
+    if (g && commit && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      g.style.transition = "transform .15s ease-out";
+      g.style.transform = "translate3d(" + r.left + "px," + r.top + "px,0) scale(1)";
+      setTimeout(finish, 150);
+    } else finish();
   }
   document.addEventListener("pointerup", e => { if (drag && e.pointerId === drag.pointerId) endDrag(true); });
   document.addEventListener("pointercancel", e => { if (drag && e.pointerId === drag.pointerId) endDrag(false); });
