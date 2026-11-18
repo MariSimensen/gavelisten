@@ -80,20 +80,30 @@ Push the repository and enable Pages (Settings > Pages, deploy from the
 To try it locally, serve the folder with any static server, for example
 `python3 -m http.server 8000`, and open `http://localhost:8000/`.
 
+## Layout
+
+Once signed in, the page shows only the list: the name pills and the cards.
+Everything else (group name and switching, adding a person, hiding what is
+bought, inviting, members, sharing the app, theme, signing out) sits in the
+☰ menu at the top right, so the list stays the focus. When "Skjul hva som er
+kjøpt" is on, a small "Kjøpt er skjult · Vis" label stays above the list so
+nobody forgets it is on. On narrow screens the name pills are one row that
+scrolls sideways (the next pill peeks past the edge) instead of wrapping into
+several rows; this keeps the counts visible and dragging to reorder working,
+which a dropdown would lose.
+
 ## How groups work
 
 - The first time someone signs in they choose a display name, which the
   other members see.
 - Someone who is in no group can create one. The creator becomes its owner.
 - Every group has a secret invite link (`<page>?bli-med=<group-name>-<token>`)
-  shown under "Inviter og medlemmer". Opening it, before or after signing in,
+  shown under "Inviter familien" in the menu. Opening it, before or after signing in,
   adds you to the group. The group name is only there so people can see which
   group a link is for; the random token is what grants access, so a link with
   just the name would let anyone join. Older links without the name still work.
-- The same panel has "Del Gavelisten-appen", which copies the plain page
-  address. Someone who signs in from it is in no group and makes their own.
-- People can be in several groups and switch between them at the top of the
-  page. The last chosen group is remembered on that device.
+- "Del Gavelisten-appen" in the menu copies the plain page address. Someone who signs in from it is in no group and makes their own.
+- People can be in several groups and switch between them in the menu. The last chosen group is remembered on that device.
 - All members can add, change and delete people and wishes in the group.
 - The owner can rename the group, make a new invite link (the old one stops
   working) and remove members. Removing someone does not change the link, so

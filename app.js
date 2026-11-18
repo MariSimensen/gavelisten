@@ -148,7 +148,7 @@
   // ---------- state ----------
   const freshUi = () => ({
     renaming: null, confirmPerson: null, editingWish: null, confirmWish: null,
-    panelOpen: false, renamingGroup: false, confirmRegen: false, confirmMember: null, confirmLeave: false,
+    menuOpen: false, panelOpen: false, renamingGroup: false, confirmRegen: false, confirmMember: null, confirmLeave: false,
   });
   const S = {
     sb: null, url: "", key: "", token: null,
@@ -170,7 +170,10 @@
 
   const $ = (id) => document.getElementById(id);
   const els = {
-    groupbar: $("groupbar"), groupSelect: $("groupSelect"), panelBtn: $("panelBtn"), who: $("who"), signOut: $("signOut"),
+    menuWrap: $("menuWrap"), menuBtn: $("menuBtn"), menu: $("menu"), topTheme: $("topTheme"), lead: $("lead"),
+    menuGroupSec: $("menuGroupSec"), menuGroupName: $("menuGroupName"), groupSelectWrap: $("groupSelectWrap"), menuListSec: $("menuListSec"), menuShareSec: $("menuShareSec"),
+    inviteBtn: $("inviteBtn"), panelClose: $("panelClose"), hiddenNote: $("hiddenNote"),
+    groupSelect: $("groupSelect"), panelBtn: $("panelBtn"), who: $("who"), signOut: $("signOut"),
     hideToggle: $("hideToggle"),
     banner: $("banner"),
     authView: $("authView"), authAsk: $("authAsk"), authInvited: $("authInvited"), authForm: $("authForm"), authEmail: $("authEmail"),
@@ -182,7 +185,7 @@
     groupRename: $("groupRename"), groupRenameInput: $("groupRenameInput"), groupRenameSave: $("groupRenameSave"),
     groupRenameCancel: $("groupRenameCancel"), groupRenameErr: $("groupRenameErr"),
     inviteLink: $("inviteLink"), copyInvite: $("copyInvite"), copyStatus: $("copyStatus"), regenArea: $("regenArea"),
-    inviteHint: $("inviteHint"), appLink: $("appLink"), copyApp: $("copyApp"), copyAppStatus: $("copyAppStatus"),
+    inviteHint: $("inviteHint"), copyApp: $("copyApp"),
     membersTitle: $("membersTitle"), memberList: $("memberList"), panelFoot: $("panelFoot"),
     listView: $("listView"),
     addPersonBtn: $("addPersonBtn"), addPersonForm: $("addPersonForm"), newPersonName: $("newPersonName"),
@@ -360,14 +363,26 @@
     els.nameView.hidden = v !== "name";
     els.createView.hidden = v !== "create";
     els.listView.hidden = v !== "list";
-    els.groupbar.hidden = !(v === "list" || v === "create" || v === "name");
+    // Signed in: everything except the list lives in the menu.
+    const signedIn = v === "list" || v === "create" || v === "name";
+    els.menuWrap.hidden = !signedIn;
+    els.topTheme.hidden = signedIn;
+    els.lead.hidden = signedIn;
+    document.body.classList.toggle("signed-in", signedIn);
+    if (!signedIn && S.ui.menuOpen) S.ui.menuOpen = false;
+    els.menu.hidden = !S.ui.menuOpen;
+    els.menuBtn.setAttribute("aria-expanded", S.ui.menuOpen ? "true" : "false");
     els.groupPanel.hidden = !(v === "list" && S.ui.panelOpen);
     els.authInvited.hidden = !pendingInvite;
 
-    const showSwitch = v === "list" || (v === "create" && S.groups.length > 0);
-    els.groupSelect.hidden = !showSwitch;
-    els.panelBtn.hidden = v !== "list";
-    els.panelBtn.setAttribute("aria-expanded", S.ui.panelOpen ? "true" : "false");
+    const g = v === "list" ? currentGroup() : null;
+    els.menuGroupName.textContent = g ? (g.name || "Uten navn") : "";
+    els.menuGroupName.hidden = !g;
+    els.menuListSec.hidden = v !== "list";
+    els.menuShareSec.hidden = v !== "list";
+    const showSwitch = (v === "list" && S.groups.length > 1) || (v === "create" && S.groups.length > 0);
+    els.groupSelectWrap.hidden = !showSwitch;
+    els.menuGroupSec.hidden = !g && !showSwitch;
     els.who.textContent = S.myName ? "Logget inn som " + S.myName : "";
     if (showSwitch) {
       const opts = S.groups.map(g => h("option", { value: g.id, text: g.name || "Uten navn" }));
@@ -462,15 +477,40 @@
     if (S.view === "create") S.view = "list";
     chooseGroup(gid);
   });
-  els.panelBtn.addEventListener("click", () => {
-    const open = !S.ui.panelOpen;
-    S.ui.panelOpen = open;
-    if (!open) { S.ui.renamingGroup = false; S.ui.confirmRegen = false; S.ui.confirmMember = null; S.ui.confirmLeave = false; }
-    els.copyStatus.textContent = "";
-    els.copyAppStatus.textContent = "";
+  // ---------- menu ----------
+  function setMenu(open, refocus) {
+    S.ui.menuOpen = open;
     render();
-    if (open) els.copyInvite.focus();
+    if (open) ([...els.menu.querySelectorAll("select, .menu-item, input")].find(el => el.getClientRects().length) || els.signOut).focus();
+    else if (refocus) els.menuBtn.focus();
+  }
+  els.menuBtn.addEventListener("click", () => setMenu(!S.ui.menuOpen, false));
+  els.menu.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.stopPropagation(); setMenu(false, true); } });
+  document.addEventListener("pointerdown", (e) => {
+    if (S.ui.menuOpen && !els.menuWrap.contains(e.target)) setMenu(false, false);
   });
+  document.addEventListener("focusin", (e) => {
+    if (S.ui.menuOpen && !els.menuWrap.contains(e.target)) { S.ui.menuOpen = false; render(); }
+  });
+
+  function openPanel(focusEl) {
+    S.ui.menuOpen = false;
+    S.ui.panelOpen = true;
+    els.copyStatus.textContent = "";
+    render();
+    focusEl.focus({ preventScroll: true });
+    els.groupPanel.scrollIntoView({ block: "start", behavior: "smooth" });
+  }
+  function closePanel() {
+    S.ui.panelOpen = false;
+    S.ui.renamingGroup = false; S.ui.confirmRegen = false; S.ui.confirmMember = null; S.ui.confirmLeave = false;
+    render();
+    els.menuBtn.focus();
+  }
+  els.inviteBtn.addEventListener("click", () => openPanel(els.copyInvite));
+  els.panelBtn.addEventListener("click", () => openPanel(els.membersTitle));
+  els.panelClose.addEventListener("click", closePanel);
+  els.groupPanel.addEventListener("keydown", (e) => { if (e.key === "Escape" && e.target.tagName !== "INPUT") closePanel(); });
 
   async function copyLink(input, status, okText) {
     const link = input.value;
@@ -485,9 +525,15 @@
   }
   els.copyInvite.addEventListener("click", () => copyLink(els.inviteLink, els.copyStatus,
     "Kopiert! Send lenken bare til dem som skal være med i denne gruppen."));
-  els.appLink.value = PAGE_URL;
-  els.copyApp.addEventListener("click", () => copyLink(els.appLink, els.copyAppStatus,
-    "Kopiert! Den som åpner lenken, lager sin egen gruppe og ser ikke listene deres."));
+  els.copyApp.addEventListener("click", async () => {
+    setMenu(false, true);
+    try {
+      await navigator.clipboard.writeText(PAGE_URL);
+      toast("Lenken til appen er kopiert. Den som åpner den, lager sin egen gruppe og ser ikke listene deres.");
+    } catch {
+      toast("Kunne ikke kopiere. Lenken til appen er " + PAGE_URL);
+    }
+  });
 
   function openGroupRename() {
     const g = currentGroup(); if (!g) return;
@@ -630,7 +676,10 @@
   }
 
   // ---------- add person ----------
-  els.addPersonBtn.addEventListener("click", () => { els.addPersonForm.hidden = false; els.addPersonErr.textContent = ""; els.newPersonName.focus(); });
+  els.addPersonBtn.addEventListener("click", () => {
+    S.ui.menuOpen = false; render();
+    els.addPersonForm.hidden = false; els.addPersonErr.textContent = ""; els.newPersonName.focus();
+  });
   els.cancelAddPerson.addEventListener("click", () => { els.addPersonForm.hidden = true; els.newPersonName.value = ""; els.addPersonErr.textContent = ""; });
   els.newPersonName.addEventListener("keydown", (e) => { if (e.key === "Escape") els.cancelAddPerson.click(); });
   els.addPersonForm.addEventListener("submit", async (e) => {
@@ -648,6 +697,10 @@
   // ---------- hide toggle ----------
   els.hideToggle.addEventListener("change", () => {
     S.hide = els.hideToggle.checked; lsSet(LS.hide, S.hide ? "1" : "0");
+    S.ui.confirmWish = null; render();
+  });
+  els.hiddenNote.addEventListener("click", () => {
+    S.hide = false; lsSet(LS.hide, "0");
     S.ui.confirmWish = null; render();
   });
 
@@ -908,6 +961,7 @@
     if (S.view !== "list") { els.state.hidden = true; return; }
 
     els.hideToggle.checked = S.hide;
+    els.hiddenNote.hidden = !S.hide;
     renderPanel();
     if (!S.loaded) { els.state.hidden = false; els.state.textContent = "Henter listen …"; els.filters.hidden = true; els.addPersonBtn.disabled = true; return; }
     els.addPersonBtn.disabled = false;
@@ -1318,6 +1372,9 @@
     }
     e.preventDefault();
     moveGhost(e.clientX, e.clientY);
+    const fr = els.filters.getBoundingClientRect();
+    if (e.clientX < fr.left + 28) els.filters.scrollLeft -= 10;
+    else if (e.clientX > fr.right - 28) els.filters.scrollLeft += 10;
     drag.ghost.style.display = "none";
     const under = document.elementFromPoint(e.clientX, e.clientY);
     drag.ghost.style.display = "";
