@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="nb">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src https://*.supabase.co wss://*.supabase.co; base-uri 'none'; form-action 'self'; object-src 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Gavelisten</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  color-scheme: light;
+  --bg:#FFFFFF;
+  --surface:#F4F7F5;
+  --surface-2:#E9F0EC;
+  --ink:#16251E;
+  --muted:#5D6B64;
+  --line:#D6E0DA;
+  --green:#1D5A42;
+  --green-hover:#164A36;
+  --on-green:#FFFFFF;
+  --green-text:#1D5A42;
+  --red:#A6213A;
+  --red-soft:#F8E6E9;
+  --warn-bg:#FFF4E0;
+  --warn-ink:#6B4500;
+  --focus:#A6213A;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --bg:#0D1612;
+    --surface:#15221C;
+    --surface-2:#1C2D25;
+    --ink:#E6EEE9;
+    --muted:#9CABA3;
+    --line:#2A3D34;
+    --green:#2E7556;
+    --green-hover:#378965;
+    --on-green:#FFFFFF;
+    --green-text:#7CC9A2;
+    --red:#E3607A;
+    --red-soft:#3A1A21;
+    --warn-bg:#3A2C10;
+    --warn-ink:#F3D49A;
+    --focus:#E3607A;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --bg:#0D1612;
+  --surface:#15221C;
+  --surface-2:#1C2D25;
+  --ink:#E6EEE9;
+  --muted:#9CABA3;
+  --line:#2A3D34;
+  --green:#2E7556;
+  --green-hover:#378965;
+  --on-green:#FFFFFF;
+  --green-text:#7CC9A2;
+  --red:#E3607A;
+  --red-soft:#3A1A21;
+  --warn-bg:#3A2C10;
+  --warn-ink:#F3D49A;
+  --focus:#E3607A;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:inherit}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased;
+}
+h1,h2,.display{font-family:"Bricolage Grotesque",Inter,system-ui,sans-serif}
+main{max-width:760px;margin:0 auto;padding:28px 18px 64px}
+button,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:6px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* Header */
+.top{display:flex;align-items:flex-start;gap:14px;margin-bottom:6px}
+.sprig{flex:none;font-size:46px;line-height:1;margin-top:2px}
+h1{font-size:clamp(2rem,7vw,2.9rem);line-height:1.02;font-weight:800;letter-spacing:-.02em;margin:0;color:var(--green-text)}
+.summary{margin:6px 0 0;color:var(--muted)}
+
+.toolbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;margin:22px 0 14px}
+.switch{display:inline-flex;align-items:center;gap:10px;cursor:pointer;background:none;border:0;padding:4px 0;text-align:left}
+.switch .track{width:40px;height:24px;border-radius:12px;background:var(--line);position:relative;flex:none;transition:background .15s}
+.switch .track::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:var(--bg);box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s}
+.switch[aria-checked="true"] .track{background:var(--green)}
+.switch[aria-checked="true"] .track::after{transform:translateX(16px)}
+.switch .lbl{font-size:.95rem}
+
+.btn{border:0;border-radius:10px;padding:9px 16px;font-weight:600;cursor:pointer;background:var(--green);color:var(--on-green)}
+.btn:hover{background:var(--green-hover)}
+.btn:disabled{opacity:.5;cursor:default}
+.btn.ghost{background:transparent;color:var(--green-text);padding:6px 10px}
+.btn.ghost:hover{background:var(--surface-2)}
+.btn.danger{background:var(--red);color:#fff}
+.btn.small{padding:6px 12px;font-size:.9rem}
+.add-btn{display:inline-flex;align-items:center;gap:6px;margin:0 0 14px}
+.add-btn svg{width:14px;height:14px;flex:none}
+.add-btn[hidden]{display:none}
+.linkbtn{background:none;border:0;padding:4px 6px;border-radius:6px;cursor:pointer;color:var(--muted);font-size:.88rem}
+.linkbtn:hover{color:var(--ink);background:var(--surface-2)}
+
+.pills{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 22px}
+.pill{border:1px solid var(--line);background:transparent;border-radius:999px;padding:6px 14px;cursor:pointer;font-size:.92rem}
+.pill .n{color:var(--muted);margin-left:4px}
+.pill[aria-pressed="true"]{background:var(--green);border-color:var(--green);color:var(--on-green)}
+.pill[aria-pressed="true"] .n{color:var(--on-green);opacity:.85}
+
+.banner{border-radius:10px;padding:10px 14px;margin:0 0 16px;background:var(--warn-bg);color:var(--warn-ink);font-size:.95rem;display:flex;gap:10px;align-items:flex-start;justify-content:space-between}
+.banner[hidden]{display:none}
+.banner.error{background:var(--red-soft);color:var(--red)}
+.banner button{flex:none}
+
+.add-person{background:var(--surface);border-radius:14px;padding:14px;margin:0 0 18px;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.add-person[hidden]{display:none}
+.add-person input{flex:1 1 220px}
+
+input[type=text],input[type=url]{
+  border:1px solid var(--line);background:var(--bg);border-radius:9px;padding:9px 11px;min-width:0;width:100%;
+}
+input[type=text]:focus,input[type=url]:focus{outline:2px solid var(--green);outline-offset:-1px;border-color:transparent}
+
+/* Cards */
+#cards{display:flex;flex-direction:column;gap:20px}
+.card{background:var(--surface);border-radius:16px;padding:18px 18px 16px}
+.card[hidden]{display:none}
+.head{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px}
+.head h2{font-size:1.5rem;font-weight:700;margin:0;letter-spacing:-.01em;overflow-wrap:anywhere}
+.head .count{color:var(--muted);font-size:.95rem}
+.head .card-actions{margin-left:auto;display:flex;gap:2px}
+.head.editing{display:block}
+.rename-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.rename-row input{flex:1 1 200px}
+.confirm-box{background:var(--red-soft);color:var(--ink);border-radius:10px;padding:10px 12px;display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
+.confirm-box p{margin:0;flex:1 1 220px}
+.confirm-box .btns{display:flex;gap:8px}
+.bar{height:4px;border-radius:2px;background:var(--line);margin:10px 0 4px;overflow:hidden}
+.bar span{display:block;height:100%;background:var(--green);border-radius:2px;transition:width .3s}
+.bar[hidden]{display:none}
+
+ul.wishes{list-style:none;margin:10px 0 0;padding:0}
+.wish{display:flex;gap:12px;align-items:flex-start;padding:12px 0;border-top:1px solid var(--line)}
+.wish:first-child{border-top:0}
+.check{display:flex;flex-direction:column;align-items:center;gap:2px;flex:none;cursor:pointer;padding-top:2px}
+.check input{position:absolute;opacity:0;width:22px;height:22px;margin:0;cursor:pointer}
+.check .box{width:22px;height:22px;border:2px solid var(--green-text);border-radius:6px;display:grid;place-items:center;background:var(--bg)}
+.check .box svg{width:14px;height:14px;opacity:0}
+.check input:checked + .box{background:var(--green);border-color:var(--green)}
+.check input:checked + .box svg{opacity:1}
+.check input:focus-visible + .box{outline:2px solid var(--focus);outline-offset:2px}
+.check input:disabled + .box{opacity:.45}
+.check .cap{font-size:.7rem;color:var(--muted)}
+.check.locked{cursor:default}
+.check{position:relative}
+.wbody{flex:1;min-width:0}
+.wtitle{font-weight:500;overflow-wrap:anywhere}
+.wish.bought .wtitle{text-decoration:line-through;text-decoration-color:var(--muted);color:var(--muted)}
+.meta{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:.88rem;margin-top:2px;color:var(--muted)}
+.meta a{color:var(--green-text);text-decoration:none;font-weight:500}
+.meta a:hover{text-decoration:underline}
+.note{margin:3px 0 0;font-size:.88rem;color:var(--muted);font-style:italic;overflow-wrap:anywhere}
+.boughtby{margin:4px 0 0;font-size:.86rem;color:var(--red);font-weight:500}
+.wactions{display:flex;gap:2px;flex:none}
+.wish .confirm-box{margin-top:8px}
+.wedit{display:grid;gap:8px;flex:1}
+.wedit .two{display:grid;grid-template-columns:2fr 1fr;gap:8px}
+.wedit .btns{display:flex;gap:8px}
+
+.empty{margin:12px 0 4px;color:var(--muted)}
+.empty[hidden]{display:none}
+
+.addwish{margin-top:14px;padding-top:14px;border-top:1px dashed var(--line);display:grid;gap:8px}
+.addwish[hidden]{display:none}
+.addwish .two{display:grid;grid-template-columns:2fr 1fr;gap:8px}
+.addwish .go{justify-self:start}
+.err{color:var(--red);font-size:.88rem;margin:0}
+.err:empty{display:none}
+
+.state{color:var(--muted);text-align:center;padding:40px 0}
+.state[hidden]{display:none}
+
+@media (max-width:520px){
+  main{padding:20px 14px 56px}
+  .card{padding:16px 14px 14px;border-radius:14px}
+  .addwish .two,.wedit .two{grid-template-columns:1fr}
+  .sprig{font-size:38px}
+}
+@media (prefers-reduced-motion: reduce){
+  *{transition:none!important}
+}
+
+/* ---------- Gavelisten: sign-in, groups ---------- */
+[hidden]{display:none!important}
+input[type=email]{border:1px solid var(--line);background:var(--bg);border-radius:9px;padding:9px 11px;min-width:0;width:100%}
+input[type=email]:focus{outline:2px solid var(--green);outline-offset:-1px;border-color:transparent}
+input[readonly]{color:var(--muted)}
+select{font:inherit;color:inherit;border:1px solid var(--line);background:var(--bg);border-radius:9px;padding:7px 10px;min-width:0;max-width:100%}
+.groupbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;margin:18px 0 0}
+.groupbar select{flex:0 1 260px;font-weight:600}
+.groupbar .who{margin-left:auto;color:var(--muted);font-size:.88rem;overflow-wrap:anywhere}
+.banner.ok{background:var(--surface-2);color:var(--green-text)}
+.panel{background:var(--surface);border-radius:16px;padding:18px;margin:18px 0}
+.panel h2{font-size:1.4rem;font-weight:700;margin:0 0 6px;letter-spacing:-.01em;overflow-wrap:anywhere}
+.panel h3{font-size:1rem;font-weight:600;margin:18px 0 6px}
+.panel p{margin:0 0 10px}
+.panel .hint{color:var(--muted);font-size:.92rem}
+.panel form{display:grid;gap:8px}
+.panel .go{justify-self:start}
+.panel .confirm-box{margin:8px 0}
+.panel-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px}
+.panel-head h2{margin:0}
+.panel-head .card-actions{margin-left:auto;display:flex;gap:2px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.row input{flex:1 1 220px}
+.copied{color:var(--green-text);font-size:.88rem;margin:6px 0 0}
+.copied:empty{display:none}
+ul.members{list-style:none;margin:0;padding:0}
+ul.members li{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;padding:8px 0;border-top:1px solid var(--line)}
+ul.members li:first-child{border-top:0}
+ul.members .mname{font-weight:500;overflow-wrap:anywhere}
+ul.members .tag{color:var(--muted);font-size:.85rem}
+ul.members .mact{margin-left:auto}
+ul.members .confirm-box{flex-basis:100%;margin:4px 0 0}
+.panel-foot{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px;padding-top:14px;border-top:1px dashed var(--line)}
+.panel-foot .confirm-box{flex-basis:100%;margin:0}
+</style>
+</head>
+<body>
+<main>
+  <header class="top">
+    <span class="sprig" aria-hidden="true">🎄</span>
+    <div>
+      <h1>Gavelisten</h1>
+      <p class="summary" id="summary">Henter listen …</p>
+    </div>
+  </header>
+
+  <div class="groupbar" id="groupbar" hidden>
+    <label class="sr" for="groupSelect">Velg gruppe</label>
+    <select id="groupSelect"></select>
+    <button class="btn ghost small" id="panelBtn" type="button" aria-expanded="false" aria-controls="groupPanel">Inviter og medlemmer</button>
+    <span class="who" id="who"></span>
+    <button class="linkbtn" id="signOut" type="button">Logg ut</button>
+  </div>
+
+  <div class="toolbar" id="toolbar" hidden>
+    <button class="switch" id="hideToggle" role="switch" aria-checked="false" type="button">
+      <span class="track"></span><span class="lbl">Skjul hva som er kjøpt (kun for deg)</span>
+    </button>
+  </div>
+
+  <div class="banner" id="banner" role="status" hidden></div>
+
+  <!-- Sign in with e-mail link -->
+  <section class="panel" id="authView" hidden aria-labelledby="authTitle">
+    <h2 id="authTitle">Logg inn</h2>
+    <div id="authAsk">
+      <p class="hint" id="authInvited" hidden>Du er invitert til en gruppe. Logg inn, så blir du med.</p>
+      <p>Skriv inn e-postadressen din, så sender vi deg en lenke du logger inn med. Du trenger ikke passord.</p>
+      <form id="authForm" novalidate>
+        <input type="email" id="authEmail" placeholder="E-postadresse" aria-label="E-postadresse" autocomplete="email" inputmode="email" maxlength="254">
+        <button class="btn go" id="authGo" type="submit">Send innloggingslenke</button>
+        <p class="err" id="authErr" aria-live="polite"></p>
+      </form>
+    </div>
+    <div id="authSent" hidden>
+      <p id="authSentText"></p>
+      <p class="hint">Åpne lenken i denne nettleseren hvis du kan. Finner du ikke e-posten, sjekk søppelpost.</p>
+      <button class="btn ghost small" id="authAgain" type="button">Bruk en annen e-postadresse</button>
+    </div>
+  </section>
+
+  <!-- First sign-in: display name -->
+  <section class="panel" id="nameView" hidden aria-labelledby="nameTitle">
+    <h2 id="nameTitle">Hva skal de andre se deg som?</h2>
+    <p class="hint">Navnet vises for de andre i gruppene dine, for eksempel når du har kjøpt noe.</p>
+    <form id="nameForm" novalidate>
+      <input type="text" id="nameInput" placeholder="Navnet ditt" aria-label="Navnet ditt" maxlength="60" autocomplete="given-name">
+      <button class="btn go" id="nameGo" type="submit">Lagre</button>
+      <p class="err" id="nameErr" aria-live="polite"></p>
+    </form>
+  </section>
+
+  <!-- Create a group -->
+  <section class="panel" id="createView" hidden aria-labelledby="createTitle">
+    <h2 id="createTitle">Lag en gruppe</h2>
+    <p class="hint" id="createIntro">Du er ikke med i noen gruppe ennå. Lag en gruppe for familien eller vennegjengen, og inviter de andre med en lenke. Har noen allerede laget en gruppe, kan du be om invitasjonslenken og åpne den, så blir du med.</p>
+    <form id="createForm" novalidate>
+      <input type="text" id="createName" placeholder="Navn på gruppen, for eksempel Familien Hansen" aria-label="Navn på gruppen" maxlength="60" autocomplete="off">
+      <div class="row">
+        <button class="btn" id="createGo" type="submit">Lag gruppe</button>
+        <button class="btn ghost" id="createCancel" type="button">Avbryt</button>
+      </div>
+      <p class="err" id="createErr" aria-live="polite"></p>
+    </form>
+  </section>
+
+  <!-- Group panel: invite link, members, leave -->
+  <section class="panel" id="groupPanel" hidden aria-labelledby="groupTitle">
+    <div class="panel-head" id="groupHead">
+      <h2 id="groupTitle"></h2>
+      <div class="card-actions" id="groupHeadActions"></div>
+    </div>
+    <div id="groupRename" hidden>
+      <div class="rename-row">
+        <input type="text" id="groupRenameInput" aria-label="Nytt navn på gruppen" maxlength="60" autocomplete="off">
+        <button class="btn small" id="groupRenameSave" type="button">Lagre</button>
+        <button class="btn ghost small" id="groupRenameCancel" type="button">Avbryt</button>
+      </div>
+      <p class="err" id="groupRenameErr" aria-live="polite"></p>
+    </div>
+
+    <h3>Inviter flere</h3>
+    <p class="hint">Alle som har denne lenken, kan bli med i gruppen og se og endre listene. Del den bare med dem som skal være med.</p>
+    <div class="row">
+      <input type="text" id="inviteLink" readonly aria-label="Invitasjonslenke">
+      <button class="btn small" id="copyInvite" type="button">Kopier lenke</button>
+    </div>
+    <p class="copied" id="copyStatus" aria-live="polite"></p>
+    <div id="regenArea"></div>
+
+    <h3 id="membersTitle">Medlemmer</h3>
+    <ul class="members" id="memberList"></ul>
+
+    <div class="panel-foot" id="panelFoot"></div>
+  </section>
+
+  <div id="listView" hidden>
+    <nav class="pills" id="pills" aria-label="Filtrer etter person"></nav>
+
+    <button class="btn small add-btn" id="addPersonBtn" type="button"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>Legg til person</button>
+
+    <div class="add-person" id="addPerson" hidden>
+      <input type="text" id="newPersonName" placeholder="Navn" aria-label="Navn på personen" maxlength="60" autocomplete="off">
+      <button class="btn" id="savePerson" type="button">Legg til</button>
+      <button class="btn ghost" id="cancelPerson" type="button">Avbryt</button>
+      <p class="err" id="personErr" style="flex-basis:100%"></p>
+    </div>
+
+    <div id="cards"></div>
+  </div>
+
+  <p class="state" id="state">Henter listen …</p>
+</main>
+
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js" integrity="sha384-0w2KAL2YHP6wKOkUDzkCDGgVvfmHnj02DHeQ6XcHOgTfFsGyonKOpShMH1x6nk9o" crossorigin="anonymous"></script>
+<script src="app.js"></script>
+</body>
+</html>
