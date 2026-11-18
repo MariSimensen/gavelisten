@@ -25,6 +25,7 @@ GitHub Pages, with [Supabase](https://supabase.com) for the database, sign-in
 | `tests/rls.sql` | Checks for the 0001 security rules, run against a local Supabase |
 | `tests/rls_v3.sql` | Checks for the 0002 rules (purchases, locks, images, moving wishes) |
 | `tests/rls_order.sql` | Checks for the 0003 rules (personal chip order is private to each user) |
+| `tests/rls_wish_order.sql` | Checks for the 0004 rules (shared wish order, members only) |
 
 ## Setup
 
@@ -32,7 +33,7 @@ GitHub Pages, with [Supabase](https://supabase.com) for the database, sign-in
 
 1. Create a Supabase project.
 2. Run the migrations in order, `supabase/migrations/0001_init.sql`,
-   `0002_v3.sql` and `0003_personal_order.sql`, either in the dashboard (SQL Editor,
+   `0002_v3.sql`, `0003_personal_order.sql` and `0004_wish_order.sql`, either in the dashboard (SQL Editor,
    paste and run) or with the CLI: `supabase init` (once, it adds
    `supabase/config.toml`), `supabase link --project-ref <ref>` and then
    `supabase db push`. Never edit a migration that has already been
@@ -102,6 +103,13 @@ handles, dragged straight away with a finger or mouse, and "Ferdig" to close.
 On phones the row otherwise both scrolls and drags, and the phone decides which
 a finger means, so hold-and-drag there was unreliable; outside sort mode only a
 mouse can drag chips.
+
+Wishes can be dragged up and down inside their own list: with a mouse, press
+and drag; on phones and tablets, hold about half a second until the row
+lifts, then drag (a quick swipe still scrolls the page). Unlike the name
+chips, this order is shared (`wishes.sort_order`), because it tells the buyers
+something, for example the most wanted wish first. A wish never moves to
+another person by dragging; "Ønske til" in the edit form does that.
 
 The order of the name chips (and the cards) is personal. Dragging a chip
 saves the order for you only, in `person_order`, so it follows you across
@@ -201,7 +209,7 @@ and refetches. That is fine at family scale.
 
 ## Testing the database rules
 
-`tests/rls.sql`, `tests/rls_v3.sql` and `tests/rls_order.sql` check the policies, RPCs, triggers and
+`tests/rls.sql`, `tests/rls_v3.sql`, `tests/rls_order.sql` and `tests/rls_wish_order.sql` check the policies, RPCs, triggers and
 Storage policies as different users, each inside a transaction that is rolled
 back. With the Supabase CLI and Docker:
 
@@ -212,6 +220,7 @@ supabase db reset          # applies both migrations
 psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f tests/rls.sql
 psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f tests/rls_v3.sql
 psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f tests/rls_order.sql
+psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f tests/rls_wish_order.sql
 ```
 
 They end with `ALL RLS CHECKS PASSED` and `ALL V3 RLS CHECKS PASSED`, or stop

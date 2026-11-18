@@ -166,7 +166,7 @@
     ui: freshUi(),
     banner: initialBanner,    // {kind: "error" | "warn" | "ok", text}
     loadSlow: false, rtDown: false, offline: !navigator.onLine,
-    dragging: false, orderOverride: null,
+    dragging: false, orderOverride: null, wishDragPid: null, wishOverride: null,
   };
 
   const $ = (id) => document.getElementById(id);
@@ -220,10 +220,17 @@
     }
     return list;
   }
+  // Shared order (sort_order) first, then age. While a new order is being
+  // saved, wishOverride keeps the dragged order on screen.
   function wishesOf(pid) {
-    return [...S.wishes.values()].filter(w => w.personId === pid)
-      .sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0) || a.id.localeCompare(b.id));
+    const so = (w) => w.sortOrder ?? 1e9;
+    const list = [...S.wishes.values()].filter(w => w.personId === pid)
+      .sort((a, b) => so(a) - so(b) || (a.createdAt ?? 0) - (b.createdAt ?? 0) || a.id.localeCompare(b.id));
+    const o = S.wishOverride && S.wishOverride.pid === pid ? S.wishOverride.ids : null;
+    if (o) { const ix = (id) => { const i = o.indexOf(id); return i < 0 ? 1e9 : i; }; list.sort((a, b) => ix(a.id) - ix(b.id)); }
+    return list;
   }
+  function nextWishOrder(pid) { return Math.min(100000, Math.max(0, ...wishesOf(pid).map(w => w.sortOrder || 0)) + 1); }
   function readGroup(r) {
     return { id: r.id, name: str(r.name, 60), ownerId: r.owner_id || null, token: str(r.invite_token, 100), createdAt: toMs(r.created_at) ?? 0 };
   }
@@ -237,6 +244,7 @@
       note: str(r.note, 300), quantity: q >= 1 ? Math.min(q, 99) : 1, imagePath: str(r.image_path, 200),
       bought: r.bought === true, boughtBy: typeof r.bought_by === "string" ? r.bought_by : null,
       boughtAt: toMs(r.bought_at), createdAt: toMs(r.created_at) ?? 0,
+      sortOrder: Number.isInteger(r.sort_order) ? r.sort_order : null,
     };
   }
 
@@ -1093,6 +1101,7 @@
       }
       const ok = await write(() => S.sb.from("wishes").insert({
         group_id: gid, person_id: pid, title: t, link: l.value, price: price.value.trim().slice(0, 60), note: "", quantity: q, image_path: image,
+        sort_order: nextWishOrder(pid),
       }), err);
       btn.disabled = false; btn.textContent = "Lagre";
       if (ok) { closeForm(); openBtn.focus(); }
@@ -1181,7 +1190,7 @@
     const lockBy = mode === "view" ? (lockedByOther(w.id) || {}).by || null : null;
     const sig = JSON.stringify([mode, lockBy, lockBy ? displayName(lockBy) + initialsFor(lockBy) : "", S.ui.confirmWish === w.id, w.title, href, w.price, w.note, w.imagePath, img, q, got, mine, bought, label, S.hide]);
     if (r && r.sig === sig) return r.el;
-    if (!r) { r = { el: h("li", { class: "wish" }) }; rowEls.set(w.id, r); }
+    if (!r) { r = { el: h("li", { class: "wish", dataset: { wid: w.id } }) }; rowEls.set(w.id, r); }
     r.sig = sig; r.mode = mode;
     const el = r.el;
     el.className = "wish" + (bought && !S.hide ? " bought" : "") + (lockBy ? " locked" : "");
@@ -1233,8 +1242,9 @@
     }
     if (lockBy) body.insertBefore(h("div", { class: "editing" }, avatar(lockBy), h("span", { class: "dots", text: displayName(lockBy) + " redigerer" })), body.firstChild);
     body.classList.add("clickable");
-    body.title = lockBy ? displayName(lockBy) + " redigerer dette ønsket" : "Klikk for å redigere";
+    body.title = lockBy ? displayName(lockBy) + " redigerer dette ønsket" : "Klikk for å redigere, dra for å flytte";
     body.addEventListener("click", e => {
+      if (suppressClick) return;
       if (e.target.closest("a,button,input,select,.confirm")) return;
       const sel = window.getSelection && String(window.getSelection());
       if (sel) return;
@@ -1309,7 +1319,7 @@
       const pv = pr.value.trim().slice(0, 60);
       if (pv !== w.price) patch.price = pv;
       if (nq !== q) patch.quantity = nq;
-      if (who.value && who.value !== cur.personId && S.people.has(who.value)) patch.person_id = who.value;
+      if (who.value && who.value !== cur.personId && S.people.has(who.value)) { patch.person_id = who.value; patch.sort_order = nextWishOrder(who.value); }
       const st = pic.state();
       let newImg = null;
       if (st.file) {
@@ -1360,7 +1370,7 @@
       const n = ws.length, b = ws.filter(isDone).length;
       if (S.hide) c.summary.textContent = n === 1 ? "1 ønske" : n + " ønsker";
       else c.summary.replaceChildren(h("b", { text: b + " av " + n }), " kjøpt");
-      placeChildren(c.list, ws.map(w => renderRow(w)));
+      if (S.wishDragPid !== p.id) placeChildren(c.list, ws.map(w => renderRow(w)));
       c.list.hidden = !n;
       c.empty.hidden = !!n;
       c.empty.textContent = "Ingen ønsker for " + name + " ennå. Trykk «Nytt ønske» for å legge til det første.";
@@ -1393,8 +1403,9 @@
 
   // Moves chips with a short slide instead of a jump: remember where every chip
   // was, change the DOM, then animate each chip from its old spot to its new one.
-  function flip(mutate) {
-    const chips = [...els.filters.querySelectorAll(".chip")];
+  function flip(mutate) { flipIn(els.filters, ".chip", mutate); }
+  function flipIn(box, sel, mutate) {
+    const chips = [...box.querySelectorAll(sel)];
     const before = new Map(chips.map(c => [c, c.getBoundingClientRect()]));
     mutate();
     const moved = [];
@@ -1407,7 +1418,7 @@
       moved.push(c);
     }
     if (!moved.length) return;
-    void els.filters.offsetWidth; // apply the start position before animating
+    void box.offsetWidth; // apply the start position before animating
     for (const c of moved) {
       c.style.transition = "transform .18s cubic-bezier(.2,.7,.3,1)";
       c.style.transform = "";
@@ -1494,7 +1505,7 @@
     moveGhost(e.clientX, e.clientY);
     placeAt(e.clientX, e.clientY);
   }, { passive: false });
-  document.addEventListener("touchmove", e => { if (drag && drag.active) e.preventDefault(); }, { passive: false });
+  document.addEventListener("touchmove", e => { if ((drag && drag.active) || (wdrag && wdrag.active)) e.preventDefault(); }, { passive: false });
   function endDrag(commit) {
     if (!drag) return;
     cancelAnimationFrame(drag.raf);
@@ -1525,6 +1536,121 @@
   els.filters.addEventListener("lostpointercapture", e => { if (e.target === els.filters && drag && drag.active && e.pointerId === drag.pointerId) setTimeout(() => { if (drag && drag.active) endDrag(true); }, 0); });
   window.addEventListener("blur", () => { if (drag) endDrag(false); });
   document.addEventListener("visibilitychange", () => { if (document.hidden && drag) endDrag(false); });
+  // ---------- drag wishes up and down within a list ----------
+  // Mouse: press and drag. Touch: hold about 0.45 s until the row lifts, then
+  // drag; a quicker swipe scrolls the page as usual. A row only moves inside
+  // its own list ("Ønske til" moves a wish to someone else). The order is
+  // shared: everyone in the group sees it. Pointer capture sits on the list,
+  // which stays put, never on the row that moves (see the chip drag above).
+  let wdrag = null;
+  const reducedMotion = () => window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function moveWishGhost() { wdrag.ghost.style.transform = "translate3d(0," + (wdrag.y - wdrag.offY) + "px,0) scale(1.02)"; }
+  function placeWish() {
+    const d = wdrag, list = d.list, lr = list.getBoundingClientRect();
+    const others = [...list.querySelectorAll(":scope > li.wish")].filter(x => x !== d.row);
+    if (!others.length) return;
+    const py = d.y - lr.top;
+    const ref = others.find(x => py < x.offsetTop + x.offsetHeight / 2) || null;
+    if (ref === d.row.nextElementSibling || (!ref && d.row === list.lastElementChild)) return;
+    flipIn(list, ":scope > li.wish", () => list.insertBefore(d.row, ref));
+  }
+  function wishAutoScroll() {
+    if (!wdrag || !wdrag.active) return;
+    const edge = 70, vh = window.innerHeight;
+    let v = 0;
+    if (wdrag.y < edge) v = -Math.ceil((edge - wdrag.y) / 5);
+    else if (wdrag.y > vh - edge) v = Math.ceil((wdrag.y - (vh - edge)) / 5);
+    if (v) { const prev = window.scrollY; window.scrollBy(0, v); if (window.scrollY !== prev) placeWish(); }
+    wdrag.raf = requestAnimationFrame(wishAutoScroll);
+  }
+  function startWishDrag() {
+    const d = wdrag;
+    d.active = true; S.wishDragPid = d.pid;
+    const r = d.row.getBoundingClientRect();
+    d.offY = d.y - r.top;
+    try { const sel = window.getSelection && window.getSelection(); if (sel) sel.removeAllRanges(); } catch {}
+    const g = d.row.cloneNode(true);
+    g.classList.add("wish-ghost"); g.removeAttribute("data-wid"); g.setAttribute("aria-hidden", "true");
+    g.style.width = r.width + "px"; g.style.left = r.left + "px";
+    document.body.appendChild(g); d.ghost = g; moveWishGhost();
+    d.row.classList.add("dragging"); document.body.classList.add("wish-dragging");
+    try { d.list.setPointerCapture(d.pointerId); } catch {}
+    try { if (navigator.vibrate) navigator.vibrate(15); } catch {}
+    d.raf = requestAnimationFrame(wishAutoScroll);
+  }
+  els.cards.addEventListener("pointerdown", e => {
+    if (wdrag) endWishDrag(wdrag.active);
+    const row = e.target.closest("li.wish");
+    if (!row || !row.dataset.wid || !S.sb) return;
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    if (e.target.closest("a,button,input,select,textarea,label,.confirm,.thumb,.edit,.stepper")) return;
+    const w = S.wishes.get(row.dataset.wid);
+    if (!w || S.ui.editingWish === w.id) return;
+    const list = row.parentNode;
+    if (list.querySelectorAll(":scope > li.wish").length < 2) return;
+    wdrag = { pid: w.personId, row, list, pointerId: e.pointerId, sx: e.clientX, sy: e.clientY, x: e.clientX, y: e.clientY, active: false, touch: e.pointerType !== "mouse" };
+    if (wdrag.touch) {
+      row.classList.add("pressing");
+      wdrag.timer = setTimeout(() => { if (wdrag && !wdrag.active) { row.classList.remove("pressing"); startWishDrag(); } }, 450);
+    }
+  });
+  els.cards.addEventListener("contextmenu", e => { if (wdrag || (e.target.closest("li.wish") && matchMedia("(pointer: coarse)").matches)) e.preventDefault(); });
+  document.addEventListener("pointermove", e => {
+    if (!wdrag || e.pointerId !== wdrag.pointerId) return;
+    wdrag.x = e.clientX; wdrag.y = e.clientY;
+    if (!wdrag.active) {
+      const dist = Math.hypot(e.clientX - wdrag.sx, e.clientY - wdrag.sy);
+      if (wdrag.touch) { if (dist > 10) endWishDrag(false); return; }
+      if (dist < 6) return;
+      startWishDrag();
+    }
+    e.preventDefault();
+    moveWishGhost();
+    placeWish();
+  }, { passive: false });
+  function endWishDrag(commit) {
+    if (!wdrag) return;
+    const d = wdrag; wdrag = null;
+    clearTimeout(d.timer); cancelAnimationFrame(d.raf);
+    d.row.classList.remove("pressing");
+    if (!d.active) return;
+    suppressClick = true; setTimeout(() => { suppressClick = false; }, 80);
+    document.body.classList.remove("wish-dragging");
+    const ids = [...d.list.querySelectorAll(":scope > li.wish")].map(el => el.dataset.wid).filter(Boolean);
+    const g = d.ghost, r = d.row.getBoundingClientRect();
+    const finish = () => {
+      if (g) g.remove();
+      d.row.classList.remove("dragging");
+      S.wishDragPid = null;
+      if (commit) saveWishOrder(d.pid, ids); else render();
+    };
+    if (g && commit && !reducedMotion()) {
+      g.style.transition = "transform .15s ease-out";
+      g.style.transform = "translate3d(0," + r.top + "px,0)";
+      setTimeout(finish, 150);
+    } else finish();
+  }
+  document.addEventListener("pointerup", e => { if (wdrag && e.pointerId === wdrag.pointerId) endWishDrag(true); });
+  document.addEventListener("pointercancel", e => { if (wdrag && e.pointerId === wdrag.pointerId) endWishDrag(false); });
+  document.addEventListener("touchend", e => { if (wdrag && !e.touches.length) endWishDrag(wdrag.active); });
+  document.addEventListener("touchcancel", () => { if (wdrag) endWishDrag(false); });
+  document.addEventListener("lostpointercapture", e => { if (wdrag && wdrag.active && e.target === wdrag.list && e.pointerId === wdrag.pointerId) setTimeout(() => { if (wdrag && wdrag.active) endWishDrag(true); }, 0); });
+  window.addEventListener("blur", () => { if (wdrag) endWishDrag(false); });
+  document.addEventListener("visibilitychange", () => { if (document.hidden && wdrag) endWishDrag(false); });
+  // Saves the list's order as sort_order 1..n, shared with the group.
+  async function saveWishOrder(pid, ids) {
+    ids = ids.filter(id => S.wishes.get(id)?.personId === pid);
+    const changes = ids.map((id, i) => ({ id, n: i + 1 })).filter(x => S.wishes.get(x.id).sortOrder !== x.n);
+    if (!changes.length) { render(); return; }
+    S.wishOverride = { pid, ids };
+    for (const c of changes) S.wishes.get(c.id).sortOrder = c.n;
+    render();
+    const results = await Promise.all(changes.map(c => write(() => S.sb.from("wishes").update({ sort_order: c.n }).eq("id", c.id))));
+    S.wishOverride = null;
+    if (results.some(x => !x)) scheduleRefetch(0);
+    render();
+  }
+
   // Saves my personal order (1..n). Others keep their own order.
   async function saveOrder(ids) {
     ids = ids.filter(id => S.people.has(id));
@@ -1572,7 +1698,7 @@
         sb.from("groups").select("id,name,owner_id,invite_token,created_at").order("created_at"),
         sb.from("group_members").select("user_id,joined_at,profile:profiles(display_name)").eq("group_id", gid).order("joined_at"),
         sb.from("people").select("id,name,sort_order,created_at").eq("group_id", gid),
-        sb.from("wishes").select("id,person_id,title,link,price,note,quantity,image_path,bought,bought_by,bought_at,created_at").eq("group_id", gid),
+        sb.from("wishes").select("id,person_id,title,link,price,note,quantity,image_path,bought,bought_by,bought_at,created_at,sort_order").eq("group_id", gid),
         sb.from("wish_purchases").select("wish_id,user_id,n,at").eq("group_id", gid),
         sb.from("wish_locks").select("wish_id,locked_by,tab,started_at,expires_at").eq("group_id", gid),
         sb.from("person_order").select("person_id,position").eq("group_id", gid).eq("user_id", S.uid),
