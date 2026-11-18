@@ -83,7 +83,8 @@ To try it locally, serve the folder with any static server, for example
 ## Layout
 
 Once signed in, the page shows only the list: the name pills and the cards.
-Everything else (group name and switching, adding a person, hiding what is
+Everything else (theme, group name and switching, starting a new group,
+adding a person, hiding what is
 bought, inviting, members, sharing the app, theme, signing out) sits in the
 ☰ menu at the top right, so the list stays the focus. When "Skjul hva som er
 kjøpt" is on, a small "Kjøpt er skjult · Vis" label stays above the list so

@@ -172,7 +172,7 @@
   const els = {
     menuWrap: $("menuWrap"), menuBtn: $("menuBtn"), menu: $("menu"), topTheme: $("topTheme"), lead: $("lead"),
     menuGroupSec: $("menuGroupSec"), menuGroupName: $("menuGroupName"), groupSelectWrap: $("groupSelectWrap"), menuListSec: $("menuListSec"), menuShareSec: $("menuShareSec"),
-    inviteBtn: $("inviteBtn"), panelClose: $("panelClose"), hiddenNote: $("hiddenNote"),
+    inviteBtn: $("inviteBtn"), newGroupBtn: $("newGroupBtn"), panelClose: $("panelClose"), hiddenNote: $("hiddenNote"),
     groupSelect: $("groupSelect"), panelBtn: $("panelBtn"), who: $("who"), signOut: $("signOut"),
     hideToggle: $("hideToggle"),
     banner: $("banner"),
@@ -382,6 +382,7 @@
     els.menuShareSec.hidden = v !== "list";
     const showSwitch = (v === "list" && S.groups.length > 1) || (v === "create" && S.groups.length > 0);
     els.groupSelectWrap.hidden = !showSwitch;
+    els.newGroupBtn.hidden = v !== "list";
     els.menuGroupSec.hidden = !g && !showSwitch;
     els.who.textContent = S.myName ? "Logget inn som " + S.myName : "";
     if (showSwitch) {
@@ -394,7 +395,7 @@
     els.createCancel.hidden = S.groups.length === 0;
     els.createIntro.textContent = S.groups.length === 0
       ? "Du er ikke med i noen gruppe ennå. Lag en gruppe for familien eller vennegjengen, og inviter de andre med en lenke. Har noen allerede laget en gruppe, kan du be om invitasjonslenken og åpne den, så blir du med."
-      : "Lag en ny gruppe, for eksempel for en annen del av familien. Du kan bytte mellom gruppene øverst på siden.";
+      : "En ny gruppe får sin egen liste og sin egen invitasjonslenke, for eksempel for venner eller en annen del av familien. De du inviterer, ser ikke de andre gruppene dine. Du bytter mellom gruppene i menyen.";
   }
 
   // ---------- sign in ----------
@@ -508,6 +509,12 @@
     els.menuBtn.focus();
   }
   els.inviteBtn.addEventListener("click", () => openPanel(els.copyInvite));
+  els.newGroupBtn.addEventListener("click", () => {
+    S.ui.menuOpen = false; S.ui.panelOpen = false;
+    els.createErr.textContent = "";
+    setView("create");
+    els.createName.focus();
+  });
   els.panelBtn.addEventListener("click", () => openPanel(els.membersTitle));
   els.panelClose.addEventListener("click", closePanel);
   els.groupPanel.addEventListener("keydown", (e) => { if (e.key === "Escape" && e.target.tagName !== "INPUT") closePanel(); });
