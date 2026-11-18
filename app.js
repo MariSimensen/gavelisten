@@ -703,6 +703,7 @@
   els.addPersonBtn.addEventListener("click", openAddPerson);
 
   // ---------- sort mode ----------
+  const SORT_ICON = '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h15M15 4l4 4-4 4M20 16H5M9 12l-4 4 4 4"/></svg>';
   // On phones the name row both scrolls and drags, and the phone decides which
   // one a finger means, so hold-and-drag there is unreliable. Sort mode shows
   // all names on wrapping lines with drag handles and nothing else to do with
@@ -1038,12 +1039,13 @@
     els.sortBar.hidden = !sorting;
     // The add chip comes first so it stays visible when the row scrolls on phones.
     const addChip = h("button", { type: "button", class: "chip add-chip", onclick: openAddPerson }, "+ Legg til person");
-    const sortChip = h("button", { type: "button", class: "chip sort-chip", "aria-label": "Endre rekkefølge", title: "Endre rekkefølge", onclick: startSort }, "⇅");
+    const sortChip = h("button", { type: "button", class: "chip sort-chip", "aria-label": "Endre rekkefølge", title: "Endre rekkefølge", onclick: startSort });
+    sortChip.innerHTML = SORT_ICON; // static markup, no user data
     const shown = sorting ? items.filter(it => it.id !== "all") : items;
     box.replaceChildren(...(sorting ? [] : [addChip]), ...shown.map(it => h("button", {
       type: "button", class: "chip", "aria-pressed": String(S.filter === it.id),
       "data-pid": it.id === "all" ? null : it.id,
-      title: it.id === "all" || sorting ? null : "Dra for å endre rekkefølgen (på mobil: trykk ⇅)",
+      title: it.id === "all" || sorting ? null : "Dra for å endre rekkefølgen (på mobil: trykk på pilene)",
       onclick: () => { if (suppressClick || S.ui.sorting) return; S.filter = it.id; lsSet(LS.filter, it.id); render(); },
       onkeydown: it.id === "all" ? null : (e) => {
         // Keyboard alternative to dragging: Alt + arrow left/right.

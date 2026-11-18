@@ -96,7 +96,7 @@ scrolls sideways (the next pill peeks past the edge) instead of wrapping into
 several rows; this keeps the counts visible and dragging to reorder working,
 which a dropdown would lose.
 
-To change the order, use ⇅ at the end of the name row or "Endre rekkefølge"
+To change the order, use the left-right arrows at the end of the name row or "Endre rekkefølge"
 in the menu. That opens sort mode: all names on wrapping lines with drag
 handles, dragged straight away with a finger or mouse, and "Ferdig" to close.
 On phones the row otherwise both scrolls and drags, and the phone decides which

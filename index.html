@@ -84,7 +84,10 @@ input::placeholder{color:var(--muted);opacity:.85}
 body.chip-dragging,body.chip-dragging *{cursor:grabbing!important;user-select:none;-webkit-user-select:none}
 .chip.add-chip{border-color:var(--green);background:var(--green-soft);color:var(--green);font-weight:600;border-radius:10px}
 .chip.add-chip:hover{background:var(--surface-2)}
-.chip.sort-chip{padding:5px 11px;font-size:15px;line-height:1.2;color:var(--green);font-weight:600}
+.chip.sort-chip{padding:5px 11px;color:var(--green);display:inline-grid;place-items:center}
+.chip.sort-chip .ico{width:18px;height:18px;display:block}
+.menu-item.menu-ico{flex-direction:row;justify-content:flex-start;gap:6px}
+.menu-item .ico{width:16px;height:16px;flex:none}
 .filters.sorting{flex-wrap:wrap;overflow:visible}
 .filters.sorting .chip[data-pid]{touch-action:none;cursor:grab;border-color:var(--card-stroke);padding:7px 14px}
 .filters.sorting .chip[data-pid]::before{content:"≡";margin-inline-end:8px;color:var(--muted);font-weight:700}
@@ -283,7 +286,7 @@ ul.members .confirm{flex-basis:100%;margin:4px 0 0}
         </div>
         <div class="menu-sec" id="menuListSec">
           <button class="menu-item" id="addPersonBtn" type="button">+ Legg til person</button>
-          <button class="menu-item" id="sortBtn" type="button">⇅ Endre rekkefølge</button>
+          <button class="menu-item menu-ico" id="sortBtn" type="button"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h15M15 4l4 4-4 4M20 16H5M9 12l-4 4 4 4"/></svg>Endre rekkefølge</button>
         </div>
         <div class="menu-sec">
           <label class="switch menu-switch">
