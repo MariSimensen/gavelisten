@@ -157,6 +157,7 @@
     groups: [], gid: null, members: [],
     people: new Map(), wishes: new Map(), names: {},
     purchases: new Map(),     // wish id -> [{ userId, n, at }]
+    myOrder: new Map(),       // person id -> my own position (personal chip order)
     locks: new Map(),         // wish id -> { by, tab, startedAt, expiresAt }
     loaded: false,
     fatal: null,
@@ -203,9 +204,16 @@
   const isOwner = () => { const g = currentGroup(); return !!g && g.ownerId === S.uid; };
 
   // ---------- data access ----------
+  // Shared order first (the starting point for everyone), then my own order on
+  // top of it. People I have not placed yet (added later) go after the rest.
   function sortedPeople() {
     const list = [...S.people.values()].sort((a, b) =>
       (a.order ?? 0) - (b.order ?? 0) || (a.createdAt ?? 0) - (b.createdAt ?? 0) || a.id.localeCompare(b.id));
+    if (S.myOrder.size) {
+      const shared = new Map(list.map((p, i) => [p.id, i]));
+      const key = (p) => S.myOrder.has(p.id) ? S.myOrder.get(p.id) : 1e6 + shared.get(p.id);
+      list.sort((a, b) => key(a) - key(b));
+    }
     if (S.orderOverride) {
       const ix = (id) => { const i = S.orderOverride.indexOf(id); return i < 0 ? 1e9 : i; };
       list.sort((a, b) => ix(a.id) - ix(b.id));
@@ -1430,7 +1438,10 @@
     g.setAttribute("aria-hidden", "true");
     document.body.appendChild(g); drag.ghost = g; moveGhost(x, y);
     drag.chip.classList.add("dragging"); document.body.classList.add("chip-dragging");
-    try { drag.chip.setPointerCapture(drag.pointerId); } catch {}
+    // Capture on the row, not the chip: the chip moves around in the DOM while
+    // dragging, and moving a captured element makes the browser drop the
+    // capture, which used to end the drag after one step.
+    try { els.filters.setPointerCapture(drag.pointerId); } catch {}
     try { if (navigator.vibrate) navigator.vibrate(15); } catch {}
     drag.raf = requestAnimationFrame(autoScroll);
   }
@@ -1485,19 +1496,23 @@
   document.addEventListener("pointercancel", e => { if (drag && e.pointerId === drag.pointerId) endDrag(false); });
   document.addEventListener("touchend", e => { if (drag && !e.touches.length) endDrag(drag.active); });
   document.addEventListener("touchcancel", () => { if (drag) endDrag(false); });
-  document.addEventListener("lostpointercapture", e => { if (drag && drag.active && e.pointerId === drag.pointerId) setTimeout(() => { if (drag && drag.active) endDrag(true); }, 0); });
+  els.filters.addEventListener("lostpointercapture", e => { if (e.target === els.filters && drag && drag.active && e.pointerId === drag.pointerId) setTimeout(() => { if (drag && drag.active) endDrag(true); }, 0); });
   window.addEventListener("blur", () => { if (drag) endDrag(false); });
   document.addEventListener("visibilitychange", () => { if (document.hidden && drag) endDrag(false); });
-  // Saves the new order as sort_order 1..n for everyone in the group.
+  // Saves my personal order (1..n). Others keep their own order.
   async function saveOrder(ids) {
-    const changes = ids.map((id, i) => ({ id, order: i + 1 })).filter(x => S.people.has(x.id) && S.people.get(x.id).order !== x.order);
-    if (!changes.length) { render(); return; }
+    ids = ids.filter(id => S.people.has(id));
+    const current = sortedPeople().map(p => p.id);
+    if (ids.length === current.length && ids.every((id, i) => id === current[i]) &&
+        ids.every((id, i) => S.myOrder.get(id) === i + 1)) { render(); return; }
+    const gid = S.gid;
     S.orderOverride = ids;
-    for (const c of changes) S.people.get(c.id).order = c.order;
+    ids.forEach((id, i) => S.myOrder.set(id, i + 1));
     render();
-    const results = await Promise.all(changes.map(c => write(() => S.sb.from("people").update({ sort_order: c.order }).eq("id", c.id))));
+    const rows = ids.map((id, i) => ({ person_id: id, group_id: gid, position: i + 1 }));
+    const ok = await write(() => S.sb.from("person_order").upsert(rows, { onConflict: "user_id,person_id" }));
     S.orderOverride = null;
-    if (results.some(x => !x)) scheduleRefetch(0);
+    if (!ok) scheduleRefetch(0);
     render();
   }
 
@@ -1534,6 +1549,7 @@
         sb.from("wishes").select("id,person_id,title,link,price,note,quantity,image_path,bought,bought_by,bought_at,created_at").eq("group_id", gid),
         sb.from("wish_purchases").select("wish_id,user_id,n,at").eq("group_id", gid),
         sb.from("wish_locks").select("wish_id,locked_by,tab,started_at,expires_at").eq("group_id", gid),
+        sb.from("person_order").select("person_id,position").eq("group_id", gid).eq("user_id", S.uid),
       ]);
     } catch (e) { res = [{ error: e, status: 0 }]; }
     if (gen !== fetchGen) return;
@@ -1544,7 +1560,7 @@
       retryTimer = setTimeout(() => scheduleRefetch(0), 5000 + Math.random() * 3000);
       return;
     }
-    const [g, m, p, w, pu, lk] = res;
+    const [g, m, p, w, pu, lk, po] = res;
     S.loadSlow = false;
     const oldName = currentGroup()?.name || "gruppen";
     S.groups = g.data.map(readGroup);
@@ -1564,6 +1580,8 @@
     if (S.names[S.uid]) S.myName = S.names[S.uid];
     S.people.clear();
     for (const r of p.data) S.people.set(r.id, readPerson(r));
+    S.myOrder.clear();
+    for (const r of po.data) { const n = Math.floor(Number(r.position)); if (n >= 1 && S.people.has(r.person_id)) S.myOrder.set(r.person_id, n); }
     S.wishes.clear();
     for (const r of w.data) S.wishes.set(r.id, readWish(r));
     S.purchases.clear();
@@ -1589,7 +1607,7 @@
     if (!S.gid) return;
     const filter = "group_id=eq." + S.gid;
     const ch = S.sb.channel("gruppe-" + S.gid);
-    for (const table of ["people", "wishes", "group_members", "wish_purchases", "wish_locks"]) {
+    for (const table of ["people", "wishes", "group_members", "wish_purchases", "wish_locks", "person_order"]) {
       ch.on("postgres_changes", { event: "*", schema: "public", table, filter }, () => scheduleRefetch());
     }
     channel = ch;
@@ -1615,7 +1633,7 @@
       const panelOpen = S.ui.panelOpen, appOpen = S.ui.appOpen;
       S.ui = freshUi();
       S.ui.panelOpen = panelOpen; S.ui.appOpen = appOpen;
-      S.people.clear(); S.wishes.clear(); S.purchases.clear(); S.locks.clear(); S.members = []; S.names = {}; S.loaded = false;
+      S.people.clear(); S.myOrder.clear(); S.wishes.clear(); S.purchases.clear(); S.locks.clear(); S.members = []; S.names = {}; S.loaded = false;
       cardEls.clear(); rowEls.clear(); els.cards.replaceChildren(); els.filters.dataset.sig = "";
       els.addPersonForm.hidden = true; els.newPersonName.value = ""; els.addPersonErr.textContent = "";
       els.copyStatus.textContent = "";
@@ -1632,7 +1650,7 @@
     clearTimeout(refetchTimer); clearTimeout(retryTimer);
     if (channel) { const old = channel; channel = null; S.sb.removeChannel(old); }
     S.uid = null; S.myName = ""; S.groups = []; S.gid = null; S.members = [];
-    S.people.clear(); S.wishes.clear(); S.purchases.clear(); S.locks.clear(); S.names = {}; S.loaded = false;
+    S.people.clear(); S.myOrder.clear(); S.wishes.clear(); S.purchases.clear(); S.locks.clear(); S.names = {}; S.loaded = false;
     S.ui = freshUi(); S.loadSlow = false; S.rtDown = false; S.fatal = null;
     cardEls.clear(); rowEls.clear(); els.cards.replaceChildren(); els.filters.dataset.sig = "";
     urlCache.clear();

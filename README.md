@@ -24,14 +24,15 @@ GitHub Pages, with [Supabase](https://supabase.com) for the database, sign-in
 | `supabase/migrations/0002_v3.sql` | Quantities, purchases per person, images (Storage bucket), edit locks |
 | `tests/rls.sql` | Checks for the 0001 security rules, run against a local Supabase |
 | `tests/rls_v3.sql` | Checks for the 0002 rules (purchases, locks, images, moving wishes) |
+| `tests/rls_order.sql` | Checks for the 0003 rules (personal chip order is private to each user) |
 
 ## Setup
 
 ### 1. Create the database
 
 1. Create a Supabase project.
-2. Run the migrations in order, `supabase/migrations/0001_init.sql` and then
-   `supabase/migrations/0002_v3.sql`, either in the dashboard (SQL Editor,
+2. Run the migrations in order, `supabase/migrations/0001_init.sql`,
+   `0002_v3.sql` and `0003_personal_order.sql`, either in the dashboard (SQL Editor,
    paste and run) or with the CLI: `supabase init` (once, it adds
    `supabase/config.toml`), `supabase link --project-ref <ref>` and then
    `supabase db push`. Never edit a migration that has already been
@@ -94,6 +95,13 @@ nobody forgets it is on. On narrow screens the name pills are one row that
 scrolls sideways (the next pill peeks past the edge) instead of wrapping into
 several rows; this keeps the counts visible and dragging to reorder working,
 which a dropdown would lose.
+
+The order of the name chips (and the cards) is personal. Dragging a chip
+saves the order for you only, in `person_order`, so it follows you across
+devices without changing what the others see. This replaces the shared order in spec v3,
+at the owner's request, so nobody's sorting changes the list for the others.
+`people.sort_order` stays as the shared starting order for anyone who has not
+sorted yet, and people added later go after the ones you have placed.
 
 ## How groups work
 
@@ -186,7 +194,7 @@ and refetches. That is fine at family scale.
 
 ## Testing the database rules
 
-`tests/rls.sql` and `tests/rls_v3.sql` check the policies, RPCs, triggers and
+`tests/rls.sql`, `tests/rls_v3.sql` and `tests/rls_order.sql` check the policies, RPCs, triggers and
 Storage policies as different users, each inside a transaction that is rolled
 back. With the Supabase CLI and Docker:
 
@@ -196,6 +204,7 @@ supabase start
 supabase db reset          # applies both migrations
 psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f tests/rls.sql
 psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f tests/rls_v3.sql
+psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f tests/rls_order.sql
 ```
 
 They end with `ALL RLS CHECKS PASSED` and `ALL V3 RLS CHECKS PASSED`, or stop
