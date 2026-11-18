@@ -148,7 +148,7 @@
   // ---------- state ----------
   const freshUi = () => ({
     renaming: null, confirmPerson: null, editingWish: null, confirmWish: null,
-    menuOpen: false, panelOpen: false, appOpen: false, renamingGroup: false, confirmRegen: false, confirmMember: null, confirmLeave: false,
+    menuOpen: false, panelOpen: false, appOpen: false, sorting: false, renamingGroup: false, confirmRegen: false, confirmMember: null, confirmLeave: false,
   });
   const S = {
     sb: null, url: "", key: "", token: null,
@@ -173,7 +173,7 @@
   const els = {
     menuWrap: $("menuWrap"), menuBtn: $("menuBtn"), menu: $("menu"), topTheme: $("topTheme"), lead: $("lead"),
     menuGroupSec: $("menuGroupSec"), menuGroupName: $("menuGroupName"), groupSelectWrap: $("groupSelectWrap"), menuListSec: $("menuListSec"), menuShareSec: $("menuShareSec"),
-    inviteBtn: $("inviteBtn"), newGroupBtn: $("newGroupBtn"), panelClose: $("panelClose"), hiddenNote: $("hiddenNote"),
+    inviteBtn: $("inviteBtn"), sortBtn: $("sortBtn"), sortBar: $("sortBar"), sortDone: $("sortDone"), newGroupBtn: $("newGroupBtn"), panelClose: $("panelClose"), hiddenNote: $("hiddenNote"),
     groupSelect: $("groupSelect"), who: $("who"), signOut: $("signOut"),
     hideToggle: $("hideToggle"),
     banner: $("banner"),
@@ -701,6 +701,26 @@
     els.addPersonForm.hidden = false; els.addPersonErr.textContent = ""; els.newPersonName.focus();
   }
   els.addPersonBtn.addEventListener("click", openAddPerson);
+
+  // ---------- sort mode ----------
+  // On phones the name row both scrolls and drags, and the phone decides which
+  // one a finger means, so hold-and-drag there is unreliable. Sort mode shows
+  // all names on wrapping lines with drag handles and nothing else to do with
+  // a finger, so dragging starts straight away. Laptops can drag any time.
+  function startSort() {
+    S.ui.menuOpen = false; S.ui.sorting = true;
+    render();
+    els.sortDone.focus({ preventScroll: true });
+    els.sortBar.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+  function stopSort() {
+    S.ui.sorting = false;
+    render();
+    els.filters.querySelector(".sort-chip")?.focus({ preventScroll: true });
+  }
+  els.sortBtn.addEventListener("click", startSort);
+  els.sortDone.addEventListener("click", stopSort);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && S.ui.sorting && !drag) stopSort(); });
   els.cancelAddPerson.addEventListener("click", () => { els.addPersonForm.hidden = true; els.newPersonName.value = ""; els.addPersonErr.textContent = ""; });
   els.newPersonName.addEventListener("keydown", (e) => { if (e.key === "Escape") els.cancelAddPerson.click(); });
   els.addPersonForm.addEventListener("submit", async (e) => {
@@ -1010,16 +1030,21 @@
     if (!drag) clearGhosts();
     const items = [{ id: "all", label: "Alle", n: [...S.wishes.values()].filter(w => S.people.has(w.personId)).length }]
       .concat(people.map(p => ({ id: p.id, label: p.name || "Uten navn", n: wishesOf(p.id).length })));
-    const sig = JSON.stringify([S.filter, items]);
+    const sorting = S.ui.sorting && people.length > 1;
+    const sig = JSON.stringify([S.filter, items, sorting]);
     if (box.dataset.sig === sig) return;
     box.dataset.sig = sig;
+    box.classList.toggle("sorting", sorting);
+    els.sortBar.hidden = !sorting;
     // The add chip comes first so it stays visible when the row scrolls on phones.
     const addChip = h("button", { type: "button", class: "chip add-chip", onclick: openAddPerson }, "+ Legg til person");
-    box.replaceChildren(addChip, ...items.map(it => h("button", {
+    const sortChip = h("button", { type: "button", class: "chip sort-chip", "aria-label": "Endre rekkefølge", title: "Endre rekkefølge", onclick: startSort }, "⇅");
+    const shown = sorting ? items.filter(it => it.id !== "all") : items;
+    box.replaceChildren(...(sorting ? [] : [addChip]), ...shown.map(it => h("button", {
       type: "button", class: "chip", "aria-pressed": String(S.filter === it.id),
       "data-pid": it.id === "all" ? null : it.id,
-      title: it.id === "all" ? null : "Hold inne og dra for å endre rekkefølgen",
-      onclick: () => { if (suppressClick) return; S.filter = it.id; lsSet(LS.filter, it.id); render(); },
+      title: it.id === "all" || sorting ? null : "Dra for å endre rekkefølgen (på mobil: trykk ⇅)",
+      onclick: () => { if (suppressClick || S.ui.sorting) return; S.filter = it.id; lsSet(LS.filter, it.id); render(); },
       onkeydown: it.id === "all" ? null : (e) => {
         // Keyboard alternative to dragging: Alt + arrow left/right.
         if (!e.altKey || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
@@ -1029,7 +1054,7 @@
         [ids[i], ids[j]] = [ids[j], ids[i]];
         saveOrder(ids).then(() => box.querySelector(`[data-pid="${CSS.escape(it.id)}"]`)?.focus());
       },
-    }, it.label, h("span", { class: "n", text: String(it.n) }))));
+    }, it.label, h("span", { class: "n", text: String(it.n) }))), ...(!sorting && people.length > 1 ? [sortChip] : []));
   }
 
   function makeCard(pid) {
@@ -1450,8 +1475,9 @@
     clearGhosts();
     const chip = e.target.closest(".chip[data-pid]");
     if (!chip || !S.sb || (e.pointerType === "mouse" && e.button !== 0)) return;
-    drag = { id: chip.dataset.pid, chip, pointerId: e.pointerId, sx: e.clientX, sy: e.clientY, x: e.clientX, y: e.clientY, active: false, touch: e.pointerType !== "mouse" };
-    if (drag.touch) { const x = e.clientX, y = e.clientY; drag.timer = setTimeout(() => startDrag(drag ? drag.x : x, drag ? drag.y : y), 350); }
+    // Fingers drag only in sort mode; outside it a swipe scrolls the row.
+    if (e.pointerType !== "mouse" && !S.ui.sorting) return;
+    drag = { id: chip.dataset.pid, chip, pointerId: e.pointerId, sx: e.clientX, sy: e.clientY, x: e.clientX, y: e.clientY, active: false };
   });
   els.filters.addEventListener("contextmenu", e => { if (e.target.closest(".chip[data-pid]")) e.preventDefault(); });
   document.addEventListener("pointermove", e => {
@@ -1459,8 +1485,7 @@
     drag.x = e.clientX; drag.y = e.clientY;
     const dist = Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy);
     if (!drag.active) {
-      if (drag.touch) { if (dist > 10) { clearTimeout(drag.timer); drag = null; } return; }
-      if (dist < 6) return;
+      if (dist < 5) return;
       startDrag(e.clientX, e.clientY);
     }
     e.preventDefault();
@@ -1470,7 +1495,6 @@
   document.addEventListener("touchmove", e => { if (drag && drag.active) e.preventDefault(); }, { passive: false });
   function endDrag(commit) {
     if (!drag) return;
-    clearTimeout(drag.timer);
     cancelAnimationFrame(drag.raf);
     const d = drag; drag = null;
     if (!d.active) return;

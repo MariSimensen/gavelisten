@@ -96,6 +96,13 @@ scrolls sideways (the next pill peeks past the edge) instead of wrapping into
 several rows; this keeps the counts visible and dragging to reorder working,
 which a dropdown would lose.
 
+To change the order, use ⇅ at the end of the name row or "Endre rekkefølge"
+in the menu. That opens sort mode: all names on wrapping lines with drag
+handles, dragged straight away with a finger or mouse, and "Ferdig" to close.
+On phones the row otherwise both scrolls and drags, and the phone decides which
+a finger means, so hold-and-drag there was unreliable; outside sort mode only a
+mouse can drag chips.
+
 The order of the name chips (and the cards) is personal. Dragging a chip
 saves the order for you only, in `person_order`, so it follows you across
 devices without changing what the others see. This replaces the shared order in spec v3,

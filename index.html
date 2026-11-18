@@ -84,6 +84,11 @@ input::placeholder{color:var(--muted);opacity:.85}
 body.chip-dragging,body.chip-dragging *{cursor:grabbing!important;user-select:none;-webkit-user-select:none}
 .chip.add-chip{border-color:var(--green);background:var(--green-soft);color:var(--green);font-weight:600;border-radius:10px}
 .chip.add-chip:hover{background:var(--surface-2)}
+.chip.sort-chip{padding:5px 11px;font-size:15px;line-height:1.2;color:var(--green);font-weight:600}
+.filters.sorting{flex-wrap:wrap;overflow:visible}
+.filters.sorting .chip[data-pid]{touch-action:none;cursor:grab;border-color:var(--card-stroke);padding:7px 14px}
+.filters.sorting .chip[data-pid]::before{content:"≡";margin-inline-end:8px;color:var(--muted);font-weight:700}
+.sort-bar{display:flex;align-items:center;justify-content:space-between;gap:8px 12px;flex-wrap:wrap;font-size:14px;color:var(--muted)}
 .chip[aria-pressed=true]{background:var(--green);border-color:var(--green);color:var(--chip-on-text)}
 .chip[aria-pressed=true] .n{color:inherit;opacity:.8}
 .row-between{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
@@ -194,9 +199,9 @@ body.chip-dragging,body.chip-dragging *{cursor:grabbing!important;user-select:no
 @media (max-width:520px){
   .wrap{padding:24px 22px 32px}
   /* One swipeable row of name pills; the next pill peeks past the edge. */
-  .filters{flex-wrap:nowrap;overflow-x:auto;margin-inline:-22px;padding:2px 22px 4px;scroll-padding-inline:22px;scrollbar-width:none;overscroll-behavior-x:contain}
+  .filters:not(.sorting){flex-wrap:nowrap;overflow-x:auto;margin-inline:-22px;padding:2px 22px 4px;scroll-padding-inline:22px;scrollbar-width:none;overscroll-behavior-x:contain}
   .filters::-webkit-scrollbar{display:none}
-  .filters .chip{flex:none}
+  .filters:not(.sorting) .chip{flex:none}
   .addform .two{grid-template-columns:1fr}
   .wish{gap:10px}
 }
@@ -278,6 +283,7 @@ ul.members .confirm{flex-basis:100%;margin:4px 0 0}
         </div>
         <div class="menu-sec" id="menuListSec">
           <button class="menu-item" id="addPersonBtn" type="button">+ Legg til person</button>
+          <button class="menu-item" id="sortBtn" type="button">⇅ Endre rekkefølge</button>
         </div>
         <div class="menu-sec">
           <label class="switch menu-switch">
@@ -399,6 +405,10 @@ ul.members .confirm{flex-basis:100%;margin:4px 0 0}
 
   <div id="listView" hidden>
     <div class="toolbar">
+      <div class="sort-bar" id="sortBar" hidden>
+        <span>Dra navnene dit du vil ha dem. Rekkefølgen gjelder bare for deg.</span>
+        <button class="btn primary" id="sortDone" type="button">Ferdig</button>
+      </div>
       <div class="filters" id="filters" role="group" aria-label="Filtrer på person"></div>
       <button class="hidden-note" id="hiddenNote" type="button" hidden>Kjøpt er skjult <span>Vis</span></button>
       <form class="add-person" id="addPersonForm" hidden novalidate>
