@@ -38,7 +38,8 @@
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--text)}
 body{font-family:Inter,system-ui,sans-serif;font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:28px 16px 80px}
+.wrap{max-width:760px;margin:0 auto;padding:28px 16px 32px}
+.credit{margin-top:56px;text-align:center;font-size:13px;color:var(--muted)}
 h1,h2{font-family:"Bricolage Grotesque",Inter,sans-serif;letter-spacing:-.01em;margin:0}
 h1{font-size:clamp(28px,6vw,40px);font-weight:700;color:var(--green);display:flex;align-items:center;gap:12px;line-height:1.05}
 h1 .ttl{display:flex;flex-direction:column;align-items:flex-start}
@@ -191,7 +192,7 @@ body.chip-dragging,body.chip-dragging *{cursor:grabbing!important;user-select:no
 .ferr:empty{display:none}
 .loading{color:var(--muted);text-align:center;padding:40px 0}
 @media (max-width:520px){
-  .wrap{padding:24px 22px 80px}
+  .wrap{padding:24px 22px 32px}
   /* One swipeable row of name pills; the next pill peeks past the edge. */
   .filters{flex-wrap:nowrap;overflow-x:auto;margin-inline:-22px;padding:2px 22px 4px;scroll-padding-inline:22px;scrollbar-width:none;overscroll-behavior-x:contain}
   .filters::-webkit-scrollbar{display:none}
@@ -412,6 +413,8 @@ ul.members .confirm{flex-basis:100%;margin:4px 0 0}
   </div>
 
   <p class="loading" id="state">Henter listen …</p>
+
+  <footer class="credit">Laget med <span aria-label="kjærlighet" role="img">❤️</span> av Mari Simensen · 2026</footer>
 </main>
 
 <script src="config.js"></script>
