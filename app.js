@@ -235,7 +235,7 @@
     return { id: r.id, name: str(r.name, 60), ownerId: r.owner_id || null, token: str(r.invite_token, 100), createdAt: toMs(r.created_at) ?? 0 };
   }
   function readPerson(r) {
-    return { id: r.id, name: str(r.name, 60), order: typeof r.sort_order === "number" ? r.sort_order : 0, createdAt: toMs(r.created_at) ?? 0 };
+    return { id: r.id, name: str(r.name, 60), order: typeof r.sort_order === "number" ? r.sort_order : 0, createdAt: toMs(r.created_at) ?? 0, ready: r.ready === true };
   }
   function readWish(r) {
     const q = Math.floor(Number(r.quantity));
@@ -876,7 +876,20 @@
   document.addEventListener("keydown", e => { if (e.key === "Escape") closeLightbox(); });
 
   // ---------- buying ----------
+  // A list that is not ready only warns; buying still works (owner's choice).
+  function warnNotReady(w) {
+    const p = S.people.get(w.personId);
+    if (p && !p.ready) toast("Merk: listen til " + (p.name || "denne personen") + " er ikke klar ennå. Kjøpet er registrert likevel.");
+  }
+  async function setReady(pid, ready) {
+    const p = S.people.get(pid); if (!p) return;
+    const was = p.ready; p.ready = ready; render();
+    const ok = await write(() => S.sb.from("people").update({ ready }).eq("id", pid));
+    if (!ok) { p.ready = was; render(); }
+    else toast(ready ? (p.name || "Listen") + " er merket som klar. Nå kan de andre kjøpe." : (p.name || "Listen") + " er merket som ikke klar.");
+  }
   async function setBought(w, on) {
+    if (on) warnNotReady(w);
     if (on) return write(() => S.sb.from("wishes").update({ bought: true }).eq("id", w.id));
     // Unticking: clear the checkbox purchase and your own counted purchase.
     // Other members' counted purchases can only be undone by themselves.
@@ -894,6 +907,7 @@
   }
   // +1 or -1 on "Jeg har kjøpt". The server refuses going above the quantity.
   async function stepMine(w, d) {
+    if (d > 0) warnNotReady(w);
     const row = myPurchaseRow(w);
     if (d > 0) {
       return row
@@ -1038,7 +1052,7 @@
     if (S.dragging) return;
     if (!drag) clearGhosts();
     const items = [{ id: "all", label: "Alle", n: [...S.wishes.values()].filter(w => S.people.has(w.personId)).length }]
-      .concat(people.map(p => ({ id: p.id, label: p.name || "Uten navn", n: wishesOf(p.id).length })));
+      .concat(people.map(p => ({ id: p.id, label: p.name || "Uten navn", n: wishesOf(p.id).length, draft: !p.ready })));
     const sorting = S.ui.sorting && people.length > 1;
     const sig = JSON.stringify([S.filter, items, sorting]);
     if (box.dataset.sig === sig) return;
@@ -1064,11 +1078,11 @@
         [ids[i], ids[j]] = [ids[j], ids[i]];
         saveOrder(ids).then(() => box.querySelector(`[data-pid="${CSS.escape(it.id)}"]`)?.focus());
       },
-    }, it.label, h("span", { class: "n", text: String(it.n) }))), ...(!sorting && people.length > 1 ? [sortChip] : []));
+    }, it.label, h("span", { class: "n", text: String(it.n) }), it.draft ? h("span", { class: "nr-dot", title: "Ikke klar ennå", "aria-label": "ikke klar ennå" }) : null)), ...(!sorting && people.length > 1 ? [sortChip] : []));
   }
 
   function makeCard(pid) {
-    const c = { pid, head: h("div", { class: "card-head" }), summary: h("div", { class: "summary" }), list: h("ul", { class: "list" }), empty: h("div", { class: "empty" }), headSig: null, headMode: null };
+    const c = { pid, head: h("div", { class: "card-head" }), notice: h("div", { class: "notice" }), summary: h("div", { class: "summary" }), list: h("ul", { class: "list" }), empty: h("div", { class: "empty" }), headSig: null, headMode: null };
     const title = h("input", { type: "text", placeholder: "F.eks. Lego-sett", maxlength: "200", autocomplete: "off" });
     const link = h("input", { type: "text", inputmode: "url", placeholder: "https://…", maxlength: "1000", autocomplete: "off" });
     const price = h("input", { type: "text", placeholder: "F.eks. 599 kr", maxlength: "60", autocomplete: "off" });
@@ -1112,7 +1126,7 @@
     openBtn.addEventListener("click", () => { bar.hidden = true; form.hidden = false; title.focus(); });
     form.addEventListener("keydown", e => { if (e.key === "Escape") { closeForm(); openBtn.focus(); } });
     c.form = form; c.bar = bar;
-    c.root = h("section", { class: "card" }, c.head, c.summary, c.list, c.empty, bar, form);
+    c.root = h("section", { class: "card" }, c.head, c.notice, c.summary, c.list, c.empty, bar, form);
     return c;
   }
 
@@ -1120,7 +1134,7 @@
     const name = p.name || "Uten navn";
     const mode = S.ui.renaming === p.id ? "rename" : S.ui.confirmPerson === p.id ? "confirm" : "view";
     if (mode === "rename" && c.headMode === "rename") return; // keep the input untouched
-    const sig = JSON.stringify([mode, name, wishes.length]);
+    const sig = JSON.stringify([mode, name, wishes.length, p.ready]);
     if (c.headSig === sig) return;
     c.headSig = sig; c.headMode = mode;
     const nodes = [];
@@ -1140,7 +1154,10 @@
       setTimeout(() => { inp.focus(); inp.select(); }, 0);
     } else {
       const startRename = () => { S.ui.renaming = p.id; S.ui.confirmPerson = null; c.headSig = null; render(); };
-      nodes.push(h("h2", { text: name, class: "clickable", title: "Klikk for å gi nytt navn", onclick: startRename }));
+      const status = p.ready
+        ? h("button", { class: "status ready", type: "button", title: "Trykk for å merke listen som ikke klar", "aria-label": "Listen er klar. Trykk for å merke den som ikke klar.", onclick: () => setReady(p.id, false) }, "Klar ✓")
+        : h("span", { class: "status draft" }, "Ikke klar ennå");
+      nodes.push(h("div", { class: "tw" }, h("h2", { text: name, class: "clickable", title: "Klikk for å gi nytt navn", onclick: startRename }), status));
       nodes.push(h("div", { class: "actions" },
         h("button", { class: "icon-btn", type: "button", title: "Gi nytt navn", "aria-label": "Gi nytt navn til " + name, onclick: startRename }, "✏️"),
         h("button", { class: "icon-btn", type: "button", title: "Slett kortet", "aria-label": "Slett kortet til " + name, onclick: () => { S.ui.confirmPerson = p.id; S.ui.renaming = null; c.headSig = null; render(); c.head.querySelector(".confirm .btn")?.focus(); } }, "🗑")));
@@ -1367,6 +1384,14 @@
       const ws = wishesOf(p.id);
       const name = p.name || "Uten navn";
       renderHead(c, p, ws);
+      c.root.classList.toggle("not-ready", !p.ready);
+      c.notice.hidden = p.ready;
+      if (!p.ready && c.notice.dataset.pid !== p.id + (p.name || "")) {
+        c.notice.dataset.pid = p.id + (p.name || "");
+        c.notice.replaceChildren(
+          h("span", { text: "🛠 Listen er under arbeid. Vent med å kjøpe til den er merket som klar." }),
+          h("button", { class: "btn primary", type: "button", onclick: () => setReady(p.id, true) }, "Merk som klar ✓"));
+      }
       const n = ws.length, b = ws.filter(isDone).length;
       if (S.hide) c.summary.textContent = n === 1 ? "1 ønske" : n + " ønsker";
       else c.summary.replaceChildren(h("b", { text: b + " av " + n }), " kjøpt");
@@ -1697,7 +1722,7 @@
       res = await Promise.all([
         sb.from("groups").select("id,name,owner_id,invite_token,created_at").order("created_at"),
         sb.from("group_members").select("user_id,joined_at,profile:profiles(display_name)").eq("group_id", gid).order("joined_at"),
-        sb.from("people").select("id,name,sort_order,created_at").eq("group_id", gid),
+        sb.from("people").select("id,name,sort_order,created_at,ready").eq("group_id", gid),
         sb.from("wishes").select("id,person_id,title,link,price,note,quantity,image_path,bought,bought_by,bought_at,created_at,sort_order").eq("group_id", gid),
         sb.from("wish_purchases").select("wish_id,user_id,n,at").eq("group_id", gid),
         sb.from("wish_locks").select("wish_id,locked_by,tab,started_at,expires_at").eq("group_id", gid),
