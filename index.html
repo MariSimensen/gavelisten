@@ -81,7 +81,7 @@ input::placeholder{color:var(--muted);opacity:.85}
 .chip.dragging{opacity:.35}
 .chip.ghost{position:fixed;left:0;top:0;z-index:60;pointer-events:none;box-shadow:0 8px 24px rgba(0,0,0,.25);margin:0}
 body.chip-dragging,body.chip-dragging *{cursor:grabbing!important;user-select:none;-webkit-user-select:none}
-.chip.add-chip{border-style:dashed;border-color:var(--card-stroke);background:transparent;color:var(--green);font-weight:600}
+.chip.add-chip{border-color:var(--green);background:var(--green-soft);color:var(--green);font-weight:600;border-radius:10px}
 .chip.add-chip:hover{background:var(--surface-2)}
 .chip[aria-pressed=true]{background:var(--green);border-color:var(--green);color:var(--chip-on-text)}
 .chip[aria-pressed=true] .n{color:inherit;opacity:.8}
@@ -286,8 +286,7 @@ ul.members .confirm{flex-basis:100%;margin:4px 0 0}
           </label>
         </div>
         <div class="menu-sec" id="menuShareSec">
-          <button class="menu-item" id="inviteBtn" type="button">Inviter familien</button>
-          <button class="menu-item" id="panelBtn" type="button">Medlemmer og gruppe</button>
+          <button class="menu-item" id="inviteBtn" type="button">Inviter og medlemmer</button>
         </div>
         <div class="menu-sec">
           <button class="menu-item" id="copyApp" type="button">Del Gavelisten-appen</button>
@@ -381,6 +380,20 @@ ul.members .confirm{flex-basis:100%;margin:4px 0 0}
     <ul class="members" id="memberList"></ul>
 
     <div class="panel-foot" id="panelFoot"></div>
+  </section>
+
+  <!-- Share the app with another family -->
+  <section class="panel" id="appPanel" hidden aria-labelledby="appTitle">
+    <div class="panel-head">
+      <h2 id="appTitle">Del Gavelisten-appen</h2>
+      <button class="icon-btn" id="appClose" type="button" aria-label="Lukk" title="Lukk">✕</button>
+    </div>
+    <p class="hint">Vil en annen familie eller vennegjeng lage sin egen liste? Send dem denne lenken. De logger inn og lager sin egen gruppe, og ser ikke listene deres.</p>
+    <div class="row">
+      <input type="text" id="appLink" readonly aria-label="Lenke til Gavelisten-appen">
+      <button class="btn primary" id="copyAppLink" type="button">Kopier lenken til appen</button>
+    </div>
+    <p class="copied" id="copyAppStatus" aria-live="polite"></p>
   </section>
 
   <div id="listView" hidden>

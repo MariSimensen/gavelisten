@@ -83,7 +83,7 @@ To try it locally, serve the folder with any static server, for example
 ## Layout
 
 Once signed in, the page shows only the list: the name pills and the cards.
-A dashed "+ Legg til person" chip sits first in the pill row (first, so it
+A button-styled "+ Legg til person" chip sits first in the pill row (first, so it
 stays visible when the row scrolls sideways on phones).
 Everything else (theme, group name and switching, starting a new group,
 adding a person, hiding what is
@@ -101,11 +101,11 @@ which a dropdown would lose.
   other members see.
 - Someone who is in no group can create one. The creator becomes its owner.
 - Every group has a secret invite link (`<page>?bli-med=<group-name>-<token>`)
-  shown under "Inviter familien" in the menu. Opening it, before or after signing in,
+  shown under "Inviter og medlemmer" in the menu. Opening it, before or after signing in,
   adds you to the group. The group name is only there so people can see which
   group a link is for; the random token is what grants access, so a link with
   just the name would let anyone join. Older links without the name still work.
-- "Del Gavelisten-appen" in the menu copies the plain page address. Someone who signs in from it is in no group and makes their own.
+- "Del Gavelisten-appen" in the menu opens a box with the plain page address and a copy button. Someone who signs in from it is in no group and makes their own.
 - People can be in several groups and switch between them in the menu. The last chosen group is remembered on that device.
 - All members can add, change and delete people and wishes in the group.
 - The owner can rename the group, make a new invite link (the old one stops

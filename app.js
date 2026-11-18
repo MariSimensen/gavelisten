@@ -148,7 +148,7 @@
   // ---------- state ----------
   const freshUi = () => ({
     renaming: null, confirmPerson: null, editingWish: null, confirmWish: null,
-    menuOpen: false, panelOpen: false, renamingGroup: false, confirmRegen: false, confirmMember: null, confirmLeave: false,
+    menuOpen: false, panelOpen: false, appOpen: false, renamingGroup: false, confirmRegen: false, confirmMember: null, confirmLeave: false,
   });
   const S = {
     sb: null, url: "", key: "", token: null,
@@ -173,7 +173,7 @@
     menuWrap: $("menuWrap"), menuBtn: $("menuBtn"), menu: $("menu"), topTheme: $("topTheme"), lead: $("lead"),
     menuGroupSec: $("menuGroupSec"), menuGroupName: $("menuGroupName"), groupSelectWrap: $("groupSelectWrap"), menuListSec: $("menuListSec"), menuShareSec: $("menuShareSec"),
     inviteBtn: $("inviteBtn"), newGroupBtn: $("newGroupBtn"), panelClose: $("panelClose"), hiddenNote: $("hiddenNote"),
-    groupSelect: $("groupSelect"), panelBtn: $("panelBtn"), who: $("who"), signOut: $("signOut"),
+    groupSelect: $("groupSelect"), who: $("who"), signOut: $("signOut"),
     hideToggle: $("hideToggle"),
     banner: $("banner"),
     authView: $("authView"), authAsk: $("authAsk"), authInvited: $("authInvited"), authForm: $("authForm"), authEmail: $("authEmail"),
@@ -186,6 +186,7 @@
     groupRenameCancel: $("groupRenameCancel"), groupRenameErr: $("groupRenameErr"),
     inviteLink: $("inviteLink"), copyInvite: $("copyInvite"), copyStatus: $("copyStatus"), regenArea: $("regenArea"),
     inviteHint: $("inviteHint"), copyApp: $("copyApp"),
+    appPanel: $("appPanel"), appClose: $("appClose"), appLink: $("appLink"), copyAppLink: $("copyAppLink"), copyAppStatus: $("copyAppStatus"),
     membersTitle: $("membersTitle"), memberList: $("memberList"), panelFoot: $("panelFoot"),
     listView: $("listView"),
     addPersonBtn: $("addPersonBtn"), addPersonForm: $("addPersonForm"), newPersonName: $("newPersonName"),
@@ -373,6 +374,7 @@
     els.menu.hidden = !S.ui.menuOpen;
     els.menuBtn.setAttribute("aria-expanded", S.ui.menuOpen ? "true" : "false");
     els.groupPanel.hidden = !(v === "list" && S.ui.panelOpen);
+    els.appPanel.hidden = !((v === "list" || v === "create") && S.ui.appOpen);
     els.authInvited.hidden = !pendingInvite;
 
     const g = v === "list" ? currentGroup() : null;
@@ -495,7 +497,7 @@
   });
 
   function openPanel(focusEl) {
-    S.ui.menuOpen = false;
+    S.ui.menuOpen = false; S.ui.appOpen = false;
     S.ui.panelOpen = true;
     els.copyStatus.textContent = "";
     render();
@@ -515,7 +517,6 @@
     setView("create");
     els.createName.focus();
   });
-  els.panelBtn.addEventListener("click", () => openPanel(els.membersTitle));
   els.panelClose.addEventListener("click", closePanel);
   els.groupPanel.addEventListener("keydown", (e) => { if (e.key === "Escape" && e.target.tagName !== "INPUT") closePanel(); });
 
@@ -532,15 +533,19 @@
   }
   els.copyInvite.addEventListener("click", () => copyLink(els.inviteLink, els.copyStatus,
     "Kopiert! Send lenken bare til dem som skal være med i denne gruppen."));
-  els.copyApp.addEventListener("click", async () => {
-    setMenu(false, true);
-    try {
-      await navigator.clipboard.writeText(PAGE_URL);
-      toast("Lenken til appen er kopiert. Den som åpner den, lager sin egen gruppe og ser ikke listene deres.");
-    } catch {
-      toast("Kunne ikke kopiere. Lenken til appen er " + PAGE_URL);
-    }
+  els.appLink.value = PAGE_URL;
+  function closeAppPanel() { S.ui.appOpen = false; render(); els.menuBtn.focus(); }
+  els.copyApp.addEventListener("click", () => {
+    S.ui.menuOpen = false; S.ui.panelOpen = false; S.ui.appOpen = true;
+    els.copyAppStatus.textContent = "";
+    render();
+    els.copyAppLink.focus({ preventScroll: true });
+    els.appPanel.scrollIntoView({ block: "start", behavior: "smooth" });
   });
+  els.copyAppLink.addEventListener("click", () => copyLink(els.appLink, els.copyAppStatus,
+    "Kopiert! Den som åpner lenken, lager sin egen gruppe og ser ikke listene deres."));
+  els.appClose.addEventListener("click", closeAppPanel);
+  els.appPanel.addEventListener("keydown", (e) => { if (e.key === "Escape" && e.target.tagName !== "INPUT") closeAppPanel(); });
 
   function openGroupRename() {
     const g = currentGroup(); if (!g) return;
@@ -1541,9 +1546,9 @@
     S.gid = gid || null;
     if (S.gid) lsSet(LS.group, S.gid);
     if (changed) {
-      const panelOpen = S.ui.panelOpen;
+      const panelOpen = S.ui.panelOpen, appOpen = S.ui.appOpen;
       S.ui = freshUi();
-      S.ui.panelOpen = panelOpen;
+      S.ui.panelOpen = panelOpen; S.ui.appOpen = appOpen;
       S.people.clear(); S.wishes.clear(); S.purchases.clear(); S.locks.clear(); S.members = []; S.names = {}; S.loaded = false;
       cardEls.clear(); rowEls.clear(); els.cards.replaceChildren(); els.filters.dataset.sig = "";
       els.addPersonForm.hidden = true; els.newPersonName.value = ""; els.addPersonErr.textContent = "";
