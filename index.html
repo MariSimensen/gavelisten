@@ -81,6 +81,8 @@ input::placeholder{color:var(--muted);opacity:.85}
 .chip.dragging{opacity:.35}
 .chip.ghost{position:fixed;left:0;top:0;z-index:60;pointer-events:none;box-shadow:0 8px 24px rgba(0,0,0,.25);margin:0}
 body.chip-dragging,body.chip-dragging *{cursor:grabbing!important;user-select:none;-webkit-user-select:none}
+.chip.add-chip{border-style:dashed;border-color:var(--card-stroke);background:transparent;color:var(--green);font-weight:600}
+.chip.add-chip:hover{background:var(--surface-2)}
 .chip[aria-pressed=true]{background:var(--green);border-color:var(--green);color:var(--chip-on-text)}
 .chip[aria-pressed=true] .n{color:inherit;opacity:.8}
 .row-between{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
@@ -275,6 +277,8 @@ ul.members .confirm{flex-basis:100%;margin:4px 0 0}
         </div>
         <div class="menu-sec" id="menuListSec">
           <button class="menu-item" id="addPersonBtn" type="button">+ Legg til person</button>
+        </div>
+        <div class="menu-sec">
           <label class="switch menu-switch">
             <input type="checkbox" id="hideToggle">
             <span class="track" aria-hidden="true"></span>

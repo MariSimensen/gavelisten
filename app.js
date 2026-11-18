@@ -683,10 +683,11 @@
   }
 
   // ---------- add person ----------
-  els.addPersonBtn.addEventListener("click", () => {
+  function openAddPerson() {
     S.ui.menuOpen = false; render();
     els.addPersonForm.hidden = false; els.addPersonErr.textContent = ""; els.newPersonName.focus();
-  });
+  }
+  els.addPersonBtn.addEventListener("click", openAddPerson);
   els.cancelAddPerson.addEventListener("click", () => { els.addPersonForm.hidden = true; els.newPersonName.value = ""; els.addPersonErr.textContent = ""; });
   els.newPersonName.addEventListener("keydown", (e) => { if (e.key === "Escape") els.cancelAddPerson.click(); });
   els.addPersonForm.addEventListener("submit", async (e) => {
@@ -999,7 +1000,9 @@
     const sig = JSON.stringify([S.filter, items]);
     if (box.dataset.sig === sig) return;
     box.dataset.sig = sig;
-    box.replaceChildren(...items.map(it => h("button", {
+    // The add chip comes first so it stays visible when the row scrolls on phones.
+    const addChip = h("button", { type: "button", class: "chip add-chip", onclick: openAddPerson }, "+ Legg til person");
+    box.replaceChildren(addChip, ...items.map(it => h("button", {
       type: "button", class: "chip", "aria-pressed": String(S.filter === it.id),
       "data-pid": it.id === "all" ? null : it.id,
       title: it.id === "all" ? null : "Hold inne og dra for å endre rekkefølgen",

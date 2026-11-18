@@ -83,6 +83,8 @@ To try it locally, serve the folder with any static server, for example
 ## Layout
 
 Once signed in, the page shows only the list: the name pills and the cards.
+A dashed "+ Legg til person" chip sits first in the pill row (first, so it
+stays visible when the row scrolls sideways on phones).
 Everything else (theme, group name and switching, starting a new group,
 adding a person, hiding what is
 bought, inviting, members, sharing the app, theme, signing out) sits in the
