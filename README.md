@@ -85,9 +85,13 @@ To try it locally, serve the folder with any static server, for example
 - The first time someone signs in they choose a display name, which the
   other members see.
 - Someone who is in no group can create one. The creator becomes its owner.
-- Every group has a secret invite link (`<page>?bli-med=<token>`) shown under
-  "Inviter og medlemmer". Opening it, before or after signing in, adds you to
-  the group.
+- Every group has a secret invite link (`<page>?bli-med=<group-name>-<token>`)
+  shown under "Inviter og medlemmer". Opening it, before or after signing in,
+  adds you to the group. The group name is only there so people can see which
+  group a link is for; the random token is what grants access, so a link with
+  just the name would let anyone join. Older links without the name still work.
+- The same panel has "Del Gavelisten-appen", which copies the plain page
+  address. Someone who signs in from it is in no group and makes their own.
 - People can be in several groups and switch between them at the top of the
   page. The last chosen group is remembered on that device.
 - All members can add, change and delete people and wishes in the group.

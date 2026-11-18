@@ -98,7 +98,9 @@
   // Page address without query or hash: where magic links and invites point.
   const PAGE_URL = location.origin + location.pathname;
 
-  // Invite link: ?bli-med=<token>. Kept in localStorage so it survives the
+  // Invite link: ?bli-med=<group-name-slug>-<token>. The name part is only there
+  // so people can tell which group a link is for; the random token after the
+  // last "-" is what grants access. Plain ?bli-med=<token> (older links) still works. Kept in localStorage so it survives the
   // round trip through the sign-in e-mail, then stripped from the address bar.
   let pendingInvite = null;
   let initialBanner = null;
@@ -106,8 +108,9 @@
     const url = new URL(location.href);
     let changed = false;
     if (url.searchParams.has("bli-med")) {
-      const tok = (url.searchParams.get("bli-med") || "").trim().toLowerCase();
-      if (/^[0-9a-f]{16,100}$/.test(tok)) { pendingInvite = tok; lsSet(LS.invite, tok); }
+      const raw = (url.searchParams.get("bli-med") || "").trim().toLowerCase();
+      const m = /^(?:[a-z0-9-]{0,60}-)?([0-9a-f]{16,100})$/.exec(raw);
+      if (m) { const tok = m[1]; pendingInvite = tok; lsSet(LS.invite, tok); }
       else initialBanner = { kind: "error", text: "Invitasjonslenken ser ikke riktig ut. Be den som inviterte deg om å sende den på nytt." };
       url.searchParams.delete("bli-med");
       changed = true;
@@ -130,7 +133,17 @@
     if (!pendingInvite) pendingInvite = lsGet(LS.invite);
   }
   function clearInvite() { pendingInvite = null; lsDel(LS.invite); }
-  function inviteLink(token) { return PAGE_URL + "?bli-med=" + encodeURIComponent(token); }
+  // "Stokke Caleiro Simensen" -> "stokke-caleiro-simensen", "Bjørn & Åse" -> "bjorn-ase".
+  function slug(name) {
+    return String(name || "").toLowerCase()
+      .replace(/æ/g, "ae").replace(/ø/g, "o").replace(/å/g, "a")
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40).replace(/-+$/, "");
+  }
+  function inviteLink(token, groupName) {
+    const s = slug(groupName);
+    return PAGE_URL + "?bli-med=" + encodeURIComponent(s ? s + "-" + token : token);
+  }
 
   // ---------- state ----------
   const freshUi = () => ({
@@ -169,6 +182,7 @@
     groupRename: $("groupRename"), groupRenameInput: $("groupRenameInput"), groupRenameSave: $("groupRenameSave"),
     groupRenameCancel: $("groupRenameCancel"), groupRenameErr: $("groupRenameErr"),
     inviteLink: $("inviteLink"), copyInvite: $("copyInvite"), copyStatus: $("copyStatus"), regenArea: $("regenArea"),
+    inviteHint: $("inviteHint"), appLink: $("appLink"), copyApp: $("copyApp"), copyAppStatus: $("copyAppStatus"),
     membersTitle: $("membersTitle"), memberList: $("memberList"), panelFoot: $("panelFoot"),
     listView: $("listView"),
     addPersonBtn: $("addPersonBtn"), addPersonForm: $("addPersonForm"), newPersonName: $("newPersonName"),
@@ -453,21 +467,27 @@
     S.ui.panelOpen = open;
     if (!open) { S.ui.renamingGroup = false; S.ui.confirmRegen = false; S.ui.confirmMember = null; S.ui.confirmLeave = false; }
     els.copyStatus.textContent = "";
+    els.copyAppStatus.textContent = "";
     render();
     if (open) els.copyInvite.focus();
   });
 
-  els.copyInvite.addEventListener("click", async () => {
-    const link = els.inviteLink.value;
+  async function copyLink(input, status, okText) {
+    const link = input.value;
     if (!link) return;
     try {
       await navigator.clipboard.writeText(link);
-      els.copyStatus.textContent = "Kopiert! Lim inn lenken i en melding til dem du vil invitere.";
+      status.textContent = okText;
     } catch {
-      els.inviteLink.focus(); els.inviteLink.select();
-      els.copyStatus.textContent = "Kunne ikke kopiere automatisk. Lenken er merket, så du kan kopiere den selv.";
+      input.focus(); input.select();
+      status.textContent = "Kunne ikke kopiere automatisk. Lenken er merket, så du kan kopiere den selv.";
     }
-  });
+  }
+  els.copyInvite.addEventListener("click", () => copyLink(els.inviteLink, els.copyStatus,
+    "Kopiert! Send lenken bare til dem som skal være med i denne gruppen."));
+  els.appLink.value = PAGE_URL;
+  els.copyApp.addEventListener("click", () => copyLink(els.appLink, els.copyAppStatus,
+    "Kopiert! Den som åpner lenken, lager sin egen gruppe og ser ikke listene deres."));
 
   function openGroupRename() {
     const g = currentGroup(); if (!g) return;
@@ -519,8 +539,10 @@
     if (!owner) S.ui.renamingGroup = false;
     els.groupRename.hidden = !S.ui.renamingGroup;
 
-    const link = g.token ? inviteLink(g.token) : "";
+    const link = g.token ? inviteLink(g.token, g.name) : "";
     if (els.inviteLink.value !== link) { els.inviteLink.value = link; els.copyStatus.textContent = ""; }
+    els.copyInvite.textContent = "Kopier invitasjon til " + g.name;
+    els.inviteHint.textContent = "Lenken legger folk til i " + g.name + ", så de kan se og endre listene. Del den bare med dem som skal være med.";
 
     els.regenArea.replaceChildren();
     if (owner) {

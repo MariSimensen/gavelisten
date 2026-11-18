@@ -310,14 +310,22 @@ ul.members .confirm{flex-basis:100%;margin:4px 0 0}
       <div class="ferr" id="groupRenameErr" role="alert"></div>
     </div>
 
-    <h3>Inviter flere</h3>
-    <p class="hint">Alle som har denne lenken, kan bli med i gruppen og se og endre listene. Del den bare med dem som skal være med.</p>
+    <h3>Inviter til gruppen</h3>
+    <p class="hint" id="inviteHint">Lenken legger folk til i gruppen, så de kan se og endre listene. Del den bare med dem som skal være med.</p>
     <div class="row">
-      <input type="text" id="inviteLink" readonly aria-label="Invitasjonslenke">
-      <button class="btn primary" id="copyInvite" type="button">Kopier lenke</button>
+      <input type="text" id="inviteLink" readonly aria-label="Invitasjonslenke til gruppen">
+      <button class="btn primary" id="copyInvite" type="button">Kopier invitasjon</button>
     </div>
     <p class="copied" id="copyStatus" aria-live="polite"></p>
     <div id="regenArea"></div>
+
+    <h3>Del Gavelisten-appen</h3>
+    <p class="hint">Vil en annen familie lage sin egen liste? Send dem denne lenken. De lager sin egen gruppe og blir ikke med i deres.</p>
+    <div class="row">
+      <input type="text" id="appLink" readonly aria-label="Lenke til Gavelisten-appen">
+      <button class="btn" id="copyApp" type="button">Del Gavelisten-appen</button>
+    </div>
+    <p class="copied" id="copyAppStatus" aria-live="polite"></p>
 
     <h3 id="membersTitle">Medlemmer</h3>
     <ul class="members" id="memberList"></ul>
