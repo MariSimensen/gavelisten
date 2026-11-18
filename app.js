@@ -335,7 +335,7 @@
     const s = parts.length >= 2 ? [...parts[0]][0] + [...parts[parts.length - 1]][0] : [...(parts[0] || "?")].slice(0, 2).join("");
     return s.toUpperCase();
   }
-  const AV_COLORS = [["#264b1b", "#ffffff"], ["#f7c5c5", "#12300e"], ["#88a784", "#12300e"], ["#c9352a", "#ffffff"], ["#3f7a5a", "#ffffff"], ["#99e1b3", "#12300e"]];
+  const AV_COLORS = [["#264b1b", "#ffffff"], ["#f7c5c5", "#12300e"], ["#88a784", "#12300e"], ["#c9352a", "#ffffff"], ["#3f7a5a", "#ffffff"], ["#98e2a4", "#12300e"]];
   function avatar(id) {
     let hsh = 0; for (const ch of str(id)) hsh = (hsh * 31 + ch.charCodeAt(0)) >>> 0;
     const [bg, fg] = AV_COLORS[hsh % AV_COLORS.length];
