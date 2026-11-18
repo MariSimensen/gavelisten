@@ -1,5 +1,5 @@
 // Gavelisten: a shared wish list per group (family or friends).
-// Static page; data, sign-in and live updates come from Supabase.
+// Static page; data, sign-in, images and live updates come from Supabase.
 // All user data is put into the page with textContent or attributes, never innerHTML.
 (() => {
   "use strict";
@@ -34,53 +34,65 @@
   const lsDel = (k) => { try { localStorage.removeItem(k); } catch {} };
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   const toMs = (v) => { const n = v ? Date.parse(v) : NaN; return isFinite(n) ? n : null; };
+  const uuid = () => (crypto.randomUUID ? crypto.randomUUID()
+    : "10000000-1000-4000-8000-100000000000".replace(/[018]/g, c => (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)));
 
-  const MONTHS = ["jan.", "feb.", "mars", "apr.", "mai", "juni", "juli", "aug.", "sep.", "okt.", "nov.", "des."];
-  const tzFmt = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Oslo", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
-  function osloParts(ms) {
-    const o = {};
-    for (const p of tzFmt.formatToParts(new Date(ms))) o[p.type] = p.value;
-    return o;
-  }
-  function dayKey(p) { return p.year + "-" + p.month + "-" + p.day; }
-  function fmtWhen(ms) {
+  // ---------- time in Europe/Oslo: "i dag 14:05", "i går 09:30", "3. des. 18:10" ----------
+  const TZ = "Europe/Oslo";
+  const fmtKey = new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" });
+  const fmtTime = new Intl.DateTimeFormat("nb-NO", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hour12: false });
+  const fmtDay = new Intl.DateTimeFormat("nb-NO", { timeZone: TZ, day: "numeric", month: "short" });
+  const fmtYear = new Intl.DateTimeFormat("nb-NO", { timeZone: TZ, year: "numeric" });
+  function when(ms) {
     if (typeof ms !== "number" || !isFinite(ms)) return "";
-    const p = osloParts(ms), n = osloParts(Date.now());
-    const hm = p.hour + ":" + p.minute;
-    const today = dayKey(n);
-    const y = new Date(Date.UTC(+n.year, +n.month - 1, +n.day - 1));
-    const yKey = y.getUTCFullYear() + "-" + String(y.getUTCMonth() + 1).padStart(2, "0") + "-" + String(y.getUTCDate()).padStart(2, "0");
-    const key = dayKey(p);
-    if (key === today) return "i dag " + hm;
-    if (key === yKey) return "i går " + hm;
-    return Number(p.day) + ". " + MONTHS[Number(p.month) - 1] + (p.year !== n.year ? " " + p.year : "") + " " + hm;
+    const d = new Date(ms), now = new Date();
+    const k = fmtKey.format(d), today = fmtKey.format(now), yest = fmtKey.format(new Date(now.getTime() - 86400000));
+    const t = fmtTime.format(d).replace(".", ":");
+    if (k === today) return "i dag " + t;
+    if (k === yest) return "i går " + t;
+    let day = fmtDay.format(d);
+    if (!/\.$/.test(day)) day += ".";
+    if (fmtYear.format(d) !== fmtYear.format(now)) day += " " + fmtYear.format(d);
+    return day + " " + t;
   }
 
-  // Link handling: only http/https; add https:// when no scheme is given.
+  // ---------- links: only http/https; add https:// when no scheme is given ----------
   function normalizeLink(raw) {
     let s = str(raw).trim();
     if (!s) return { ok: true, value: "" };
-    if (!/^https?:\/\//i.test(s)) {
-      if (/^[a-z][a-z0-9+.-]*:(?!\d)/i.test(s)) return { ok: false };
+    if (!/^[a-z][a-z0-9+.\-]*:\/\//i.test(s)) {
+      if (/^[a-z][a-z0-9+.\-]*:/i.test(s) && !/^[^:\/]+\.[^:\/]+:\d/.test(s) && !/^localhost:/i.test(s)) {
+        return { ok: false, msg: "Lenken må være en nettadresse som starter med http eller https." };
+      }
       s = "https://" + s.replace(/^\/+/, "");
     }
-    try {
-      const u = new URL(s);
-      if ((u.protocol !== "http:" && u.protocol !== "https:") || !u.hostname.includes(".")) return { ok: false };
-      if (u.href.length > 2000) return { ok: false };
-      return { ok: true, value: u.href };
-    } catch { return { ok: false }; }
+    let u;
+    try { u = new URL(s); } catch { return { ok: false, msg: "Lenken ser ikke riktig ut. Sjekk adressen." }; }
+    if (u.protocol !== "http:" && u.protocol !== "https:") return { ok: false, msg: "Bare lenker som starter med http eller https er lov." };
+    if (!u.hostname.includes(".")) return { ok: false, msg: "Lenken ser ikke riktig ut. Sjekk adressen." };
+    if (u.href.length > 2000) return { ok: false, msg: "Lenken er for lang." };
+    return { ok: true, value: u.href };
   }
-  function safeUrl(link) {
-    try {
-      const u = new URL(str(link));
-      return (u.protocol === "http:" || u.protocol === "https:") ? u : null;
-    } catch { return null; }
+  function safeHref(v) {
+    if (typeof v !== "string" || !v) return null;
+    try { const u = new URL(v); return (u.protocol === "http:" || u.protocol === "https:") ? u.href : null; } catch { return null; }
   }
-  const LINK_ERR = "Lenken må være en nettadresse som begynner med http:// eller https://.";
+  // Shop name from the address, without fetching anything: the part before
+  // the public suffix, capitalised, with a few known spellings.
+  const SITE_NAMES = { trekbikes: "Trek", sprell: "Sprell", amazon: "Amazon", komplett: "Komplett", elkjop: "Elkjøp", xxl: "XXL", ikea: "IKEA", lekekassen: "Lekekassen", br: "BR", clasohlson: "Clas Ohlson", power: "Power", zalando: "Zalando", platekompaniet: "Platekompaniet", adlibris: "Adlibris", ark: "Ark", norli: "Norli", lego: "LEGO", apotek1: "Apotek 1", boozt: "Boozt" };
+  function siteName(href) {
+    try {
+      const host = new URL(href).hostname.replace(/^www\./, "");
+      const parts = host.split(".");
+      let base = parts.length >= 2 ? parts[parts.length - 2] : parts[0];
+      if (parts.length >= 3 && /^(co|com|org|net)$/.test(base)) base = parts[parts.length - 3];
+      if (SITE_NAMES[base]) return SITE_NAMES[base];
+      return base.charAt(0).toUpperCase() + base.slice(1);
+    } catch { return "nettsiden"; }
+  }
 
   // ---------- local storage keys ----------
-  const LS = { hide: "gl-hide", filter: "gl-filter", group: "gl-group", invite: "gl-invite" };
+  const LS = { hide: "gl-hide", filter: "gl-filter", group: "gl-group", invite: "gl-invite", theme: "gl-theme" };
 
   // ---------- read the URL before supabase-js does ----------
   // Page address without query or hash: where magic links and invites point.
@@ -126,11 +138,13 @@
     panelOpen: false, renamingGroup: false, confirmRegen: false, confirmMember: null, confirmLeave: false,
   });
   const S = {
-    sb: null,
+    sb: null, url: "", key: "", token: null,
     view: "loading",          // loading | config | auth | name | create | list
     uid: null, myName: "",
     groups: [], gid: null, members: [],
     people: new Map(), wishes: new Map(), names: {},
+    purchases: new Map(),     // wish id -> [{ userId, n, at }]
+    locks: new Map(),         // wish id -> { by, tab, startedAt, expiresAt }
     loaded: false,
     fatal: null,
     filter: lsGet(LS.filter) || "all",
@@ -138,13 +152,13 @@
     ui: freshUi(),
     banner: initialBanner,    // {kind: "error" | "warn" | "ok", text}
     loadSlow: false, rtDown: false, offline: !navigator.onLine,
+    dragging: false, orderOverride: null,
   };
 
   const $ = (id) => document.getElementById(id);
   const els = {
-    summary: $("summary"),
     groupbar: $("groupbar"), groupSelect: $("groupSelect"), panelBtn: $("panelBtn"), who: $("who"), signOut: $("signOut"),
-    toolbar: $("toolbar"), hideToggle: $("hideToggle"),
+    hideToggle: $("hideToggle"),
     banner: $("banner"),
     authView: $("authView"), authAsk: $("authAsk"), authInvited: $("authInvited"), authForm: $("authForm"), authEmail: $("authEmail"),
     authGo: $("authGo"), authErr: $("authErr"), authSent: $("authSent"), authSentText: $("authSentText"), authAgain: $("authAgain"),
@@ -157,25 +171,30 @@
     inviteLink: $("inviteLink"), copyInvite: $("copyInvite"), copyStatus: $("copyStatus"), regenArea: $("regenArea"),
     membersTitle: $("membersTitle"), memberList: $("memberList"), panelFoot: $("panelFoot"),
     listView: $("listView"),
-    addPersonBtn: $("addPersonBtn"), addPerson: $("addPerson"), newPersonName: $("newPersonName"),
-    savePerson: $("savePerson"), cancelPerson: $("cancelPerson"), personErr: $("personErr"),
-    pills: $("pills"),
+    addPersonBtn: $("addPersonBtn"), addPersonForm: $("addPersonForm"), newPersonName: $("newPersonName"),
+    savePerson: $("savePerson"), cancelAddPerson: $("cancelAddPerson"), addPersonErr: $("addPersonErr"),
+    filters: $("filters"),
     state: $("state"),
     cards: $("cards"),
   };
 
-  const cards = new Map(); // pid -> card view
-  const rows = new Map();  // wid -> row view
+  const cardEls = new Map(); // person id -> card view
+  const rowEls = new Map();  // wish id -> row view
 
   const currentGroup = () => S.groups.find(g => g.id === S.gid) || null;
   const isOwner = () => { const g = currentGroup(); return !!g && g.ownerId === S.uid; };
 
   // ---------- data access ----------
   function sortedPeople() {
-    return [...S.people.values()].sort((a, b) =>
+    const list = [...S.people.values()].sort((a, b) =>
       (a.order ?? 0) - (b.order ?? 0) || (a.createdAt ?? 0) - (b.createdAt ?? 0) || a.id.localeCompare(b.id));
+    if (S.orderOverride) {
+      const ix = (id) => { const i = S.orderOverride.indexOf(id); return i < 0 ? 1e9 : i; };
+      list.sort((a, b) => ix(a.id) - ix(b.id));
+    }
+    return list;
   }
-  function wishesFor(pid) {
+  function wishesOf(pid) {
     return [...S.wishes.values()].filter(w => w.personId === pid)
       .sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0) || a.id.localeCompare(b.id));
   }
@@ -186,11 +205,43 @@
     return { id: r.id, name: str(r.name, 60), order: typeof r.sort_order === "number" ? r.sort_order : 0, createdAt: toMs(r.created_at) ?? 0 };
   }
   function readWish(r) {
+    const q = Math.floor(Number(r.quantity));
     return {
       id: r.id, personId: str(r.person_id, 200), title: str(r.title, 200), link: str(r.link), price: str(r.price, 60),
-      note: str(r.note, 300), bought: r.bought === true, boughtBy: typeof r.bought_by === "string" ? r.bought_by : null,
+      note: str(r.note, 300), quantity: q >= 1 ? Math.min(q, 99) : 1, imagePath: str(r.image_path, 200),
+      bought: r.bought === true, boughtBy: typeof r.bought_by === "string" ? r.bought_by : null,
       boughtAt: toMs(r.bought_at), createdAt: toMs(r.created_at) ?? 0,
     };
+  }
+
+  // ---------- quantity and purchases ----------
+  // A wish's bought items are the per-person rows in wish_purchases plus one
+  // item for the single "Kjøpt" checkbox (bought / bought_by). Keeping both
+  // means a wish bought with the checkbox stays bought when its quantity is
+  // raised, and purchases stay when the quantity is lowered.
+  const qtyOf = (w) => w.quantity;
+  function purchasesOf(w) {
+    const m = new Map();
+    for (const p of S.purchases.get(w.id) || []) m.set(p.userId, { id: p.userId, n: p.n, at: p.at });
+    if (w.bought) {
+      const e = w.boughtBy && m.get(w.boughtBy);
+      if (e) { e.n += 1; e.at = Math.max(e.at || 0, w.boughtAt || 0); }
+      else m.set(w.boughtBy || "?", { id: w.boughtBy, n: 1, at: w.boughtAt });
+    }
+    return [...m.values()].sort((a, b) => (a.at || 0) - (b.at || 0));
+  }
+  const boughtCount = (w) => purchasesOf(w).reduce((s, x) => s + x.n, 0);
+  const isDone = (w) => boughtCount(w) >= qtyOf(w);
+  const myPurchaseRow = (w) => (S.purchases.get(w.id) || []).find(p => p.userId === S.uid) || null;
+  function parseQty(v) { const t = String(v).trim(); if (!t) return 1; const n = Number(t); return (Number.isInteger(n) && n >= 1 && n <= 99) ? n : null; }
+  const nf = new Intl.NumberFormat("nb-NO", { maximumFractionDigits: 2 });
+  // "1 192 kr" when the price is a single number, otherwise "".
+  function totalPrice(price, q) {
+    const m = /^\s*(ca\.?\s*)?(\d{1,3}(?:[\s .]\d{3})+|\d+)(?:,(\d{1,2}))?\s*(kr\.?|nok|,-)?\s*$/i.exec(str(price));
+    if (!m || q <= 1) return "";
+    const v = Number(m[2].replace(/[\s .]/g, "") + (m[3] ? "." + m[3] : ""));
+    if (!isFinite(v)) return "";
+    return (m[1] ? "ca. " : "") + nf.format(v * q) + " kr";
   }
 
   // ---------- errors ----------
@@ -203,12 +254,14 @@
   function isAuthErr(e, status) {
     return status === 401 || (e && /^PGRST30[0-3]$/.test(e.code || "")) || /jwt/i.test((e && e.message) || "");
   }
+  const FULL_TEXT = "Alle er allerede kjøpt, så det ble ikke registrert. Listen er oppdatert.";
   function writeErrText(e, status) {
     const code = e && e.code;
     if (isNetErr(e, status)) return "Mistet kontakten, så endringen ble ikke lagret. Sjekk nettforbindelsen og prøv igjen.";
     if (isAuthErr(e, status)) return "Du er logget ut, så endringen ble ikke lagret. Last siden inn på nytt og logg inn igjen.";
     if (status === 429) return "For mange endringer på kort tid. Vent litt og prøv igjen.";
     if (code === "42501") return "Du har ikke tilgang til dette lenger, så endringen ble ikke lagret.";
+    if (code === "23514" && /quantity/i.test((e && e.message) || "")) return FULL_TEXT;
     if (code === "23514" || code === "22001" || code === "23502") return "Noe av det du skrev ble ikke godtatt, så endringen ble ikke lagret. Sjekk feltene og prøv igjen.";
     if (code === "23503") return "Det du endret finnes ikke lenger. Listen er oppdatert, så prøv igjen.";
     return "Noe gikk galt, så endringen ble ikke lagret. Prøv igjen.";
@@ -216,9 +269,11 @@
 
   // ---------- writes ----------
   function setBanner(kind, text) { S.banner = text ? { kind, text } : null; renderBanner(); }
-  // fn returns a supabase-js promise ({ data, error, status }). Retries once on network trouble.
-  async function write(fn) {
+  // fn returns a supabase-js promise ({ data, error, status }). Retries once
+  // on network trouble. Errors go to errEl when given, otherwise the banner.
+  async function write(fn, errEl) {
     if (!S.sb || !S.uid) { setBanner("error", "Du er ikke logget inn. Last siden inn på nytt og logg inn."); return null; }
+    if (errEl) errEl.textContent = "";
     for (let attempt = 0; attempt < 2; attempt++) {
       let res;
       try { res = await fn(); } catch (e) { res = { error: e, status: 0 }; }
@@ -229,77 +284,72 @@
         return res;
       }
       if (isNetErr(e, res.status) && attempt === 0) { await sleep(400 + Math.random() * 600); continue; }
-      S.banner = { kind: "error", text: writeErrText(e, res.status), fromWrite: true };
-      renderBanner();
+      const text = writeErrText(e, res.status);
+      if (errEl) errEl.textContent = text;
+      else { S.banner = { kind: "error", text, fromWrite: true }; renderBanner(); }
       scheduleRefetch(0);
       return null;
     }
     return null;
   }
 
-  // ---------- header / toolbar ----------
-  function renderSummary() {
-    if (S.fatal || S.view === "config") { els.summary.textContent = ""; return; }
-    if (S.view === "loading") { els.summary.textContent = "Henter listen …"; return; }
-    if (S.view !== "list") { els.summary.textContent = "Ønskelister for familie og venner"; return; }
-    if (!S.loaded) { els.summary.textContent = "Henter listen …"; return; }
-    const all = [...S.wishes.values()].filter(w => S.people.has(w.personId));
-    const n = all.length;
-    const b = all.filter(w => w.bought).length;
-    const word = n === 1 ? "ønske" : "ønsker";
-    els.summary.textContent = S.hide ? `${n} ${word} på listen` : `${n} ${word} på listen, ${b} er kjøpt`;
+  // ---------- names, avatars, toast ----------
+  function nameFor(id) {
+    if (!id) return "noen";
+    if (id === S.uid) return "deg";
+    return S.names[id] || "noen";
   }
+  function displayName(id) { if (id === S.uid) return "Du"; return S.names[id] || "Noen"; }
+  // Initials from the display name: first letters of the first and last
+  // word, or the first two letters of a single word. E-mail addresses are
+  // never shown to other members.
+  function initialsFor(id) {
+    const n = str(id === S.uid ? S.myName : S.names[id]).trim();
+    const parts = n.split(/\s+/).filter(Boolean).filter(p => /[\p{L}\p{N}]/u.test(p));
+    const s = parts.length >= 2 ? [...parts[0]][0] + [...parts[parts.length - 1]][0] : [...(parts[0] || "?")].slice(0, 2).join("");
+    return s.toUpperCase();
+  }
+  const AV_COLORS = [["#264b1b", "#ffffff"], ["#f7c5c5", "#12300e"], ["#88a784", "#12300e"], ["#c9352a", "#ffffff"], ["#3f7a5a", "#ffffff"], ["#a2e595", "#12300e"]];
+  function avatar(id) {
+    let hsh = 0; for (const ch of str(id)) hsh = (hsh * 31 + ch.charCodeAt(0)) >>> 0;
+    const [bg, fg] = AV_COLORS[hsh % AV_COLORS.length];
+    const nm = displayName(id);
+    return h("span", { class: "avatar", style: "background:" + bg + ";color:" + fg, title: nm, "aria-label": nm }, initialsFor(id));
+  }
+  const toastEl = h("div", { class: "toast", role: "status", "aria-live": "polite" });
+  document.body.appendChild(toastEl);
+  let toastT = null;
+  function toast(msg) { toastEl.textContent = msg; toastEl.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(() => toastEl.classList.remove("show"), 5000); }
+
+  // ---------- banner and views ----------
   function renderBanner() {
     let msg = null;
     if (S.fatal) msg = { kind: "error", text: S.fatal };
     else if (S.banner) msg = S.banner;
     else if (S.offline) msg = { kind: "warn", text: "Du er uten nett. Det du ser kan være utdatert, og endringer lagres ikke før du er på nett igjen." };
     else if (S.view === "list" && (S.loadSlow || S.rtDown)) msg = S.loaded
-      ? { kind: "warn", text: "Får ikke kontakt med listen akkurat nå. Det du ser kan være utdatert." }
-      : { kind: "warn", text: "Får ikke kontakt med listen ennå. Sjekk nettforbindelsen." };
+      ? { kind: "warn", text: "Får ikke kontakt med listen akkurat nå. Det du ser kan være utdatert, men vi prøver fortsatt." }
+      : { kind: "warn", text: "Får ikke kontakt med listen ennå. Sjekk nettet, vi prøver fortsatt." };
     const b = els.banner;
     b.replaceChildren();
     if (!msg) { b.hidden = true; return; }
     b.hidden = false;
-    b.className = "banner" + (msg.kind === "error" ? " error" : msg.kind === "ok" ? " ok" : "");
+    b.className = "banner " + (msg.kind === "error" ? "err" : "info");
+    b.setAttribute("role", msg.kind === "error" ? "alert" : "status");
     b.append(h("span", { text: msg.text }));
-    if (S.banner && msg === S.banner) b.append(h("button", { class: "linkbtn", type: "button", text: "Lukk", onclick: () => setBanner(null) }));
+    if (S.banner && msg === S.banner) b.append(h("button", { class: "btn", type: "button", text: "Lukk", onclick: () => setBanner(null) }));
   }
-  function renderToolbar() {
-    els.hideToggle.setAttribute("aria-checked", S.hide ? "true" : "false");
-  }
-  function renderPills(people) {
-    const active = document.activeElement;
-    const activeKey = active && els.pills.contains(active) ? active.dataset.key : null;
-    const total = [...S.wishes.values()].filter(w => S.people.has(w.personId)).length;
-    const mk = (key, label, n) => h("button", {
-      class: "pill", type: "button", "aria-pressed": S.filter === key ? "true" : "false", dataset: { key },
-      onclick: () => { S.filter = key; lsSet(LS.filter, key); render(); },
-    }, label, h("span", { class: "n", text: String(n) }));
-    const nodes = [mk("all", "Alle", total)];
-    for (const p of people) nodes.push(mk(p.id, p.name || "Uten navn", wishesFor(p.id).length));
-    els.pills.replaceChildren(...nodes);
-    els.pills.hidden = people.length === 0;
-    if (activeKey) { const t = els.pills.querySelector(`[data-key="${CSS.escape(activeKey)}"]`); if (t) t.focus(); }
-  }
-
-  // ---------- views ----------
-  function setView(v) {
-    S.view = v;
-    render();
-  }
+  function setView(v) { S.view = v; render(); }
   function renderViews() {
     const v = S.view;
     els.authView.hidden = v !== "auth";
     els.nameView.hidden = v !== "name";
     els.createView.hidden = v !== "create";
     els.listView.hidden = v !== "list";
-    els.toolbar.hidden = v !== "list";
     els.groupbar.hidden = !(v === "list" || v === "create" || v === "name");
     els.groupPanel.hidden = !(v === "list" && S.ui.panelOpen);
     els.authInvited.hidden = !pendingInvite;
 
-    // group bar
     const showSwitch = v === "list" || (v === "create" && S.groups.length > 0);
     els.groupSelect.hidden = !showSwitch;
     els.panelBtn.hidden = v !== "list";
@@ -312,8 +362,6 @@
       if (!same) els.groupSelect.replaceChildren(...opts);
       if (S.gid) els.groupSelect.value = S.gid;
     }
-
-    // create view: cancel only makes sense when there is a group to go back to
     els.createCancel.hidden = S.groups.length === 0;
     els.createIntro.textContent = S.groups.length === 0
       ? "Du er ikke med i noen gruppe ennå. Lag en gruppe for familien eller vennegjengen, og inviter de andre med en lenke. Har noen allerede laget en gruppe, kan du be om invitasjonslenken og åpne den, så blir du med."
@@ -350,6 +398,7 @@
 
   els.signOut.addEventListener("click", async () => {
     els.signOut.disabled = true;
+    stopEditSession();
     try { await S.sb.auth.signOut({ scope: "local" }); } catch {}
     els.signOut.disabled = false;
     // onAuthStateChange(SIGNED_OUT) resets the page; make sure it happens even if the call failed.
@@ -435,7 +484,7 @@
     if (!v) { els.groupRenameErr.textContent = "Navnet kan ikke være tomt."; els.groupRenameInput.focus(); return; }
     if (v !== g.name) {
       els.groupRenameSave.disabled = true;
-      const ok = await write(() => S.sb.from("groups").update({ name: v }).eq("id", g.id));
+      const ok = await write(() => S.sb.from("groups").update({ name: v }).eq("id", g.id), els.groupRenameErr);
       els.groupRenameSave.disabled = false;
       if (!ok) return;
       g.name = v;
@@ -450,11 +499,10 @@
   });
 
   function confirmBox(text, yesText, onYes, onNo) {
-    return h("div", { class: "confirm-box" },
-      h("p", { text }),
-      h("div", { class: "btns" },
-        h("button", { class: "btn danger small", type: "button", text: yesText, onclick: onYes }),
-        h("button", { class: "btn ghost small", type: "button", text: "Nei", onclick: onNo })));
+    return h("div", { class: "confirm" },
+      h("span", { text }),
+      h("button", { class: "btn danger", type: "button", text: yesText, onclick: onYes }),
+      h("button", { class: "btn", type: "button", text: "Nei", onclick: onNo }));
   }
 
   function renderPanel() {
@@ -466,7 +514,7 @@
     els.groupTitle.textContent = g.name || "Uten navn";
     els.groupHeadActions.replaceChildren();
     if (owner && !S.ui.renamingGroup) {
-      els.groupHeadActions.append(h("button", { class: "linkbtn", type: "button", text: "Gi nytt navn", dataset: { key: "grename" }, onclick: openGroupRename }));
+      els.groupHeadActions.append(h("button", { class: "icon-btn", type: "button", text: "✏️", title: "Gi gruppen nytt navn", "aria-label": "Gi gruppen nytt navn", dataset: { key: "grename" }, onclick: openGroupRename }));
     }
     if (!owner) S.ui.renamingGroup = false;
     els.groupRename.hidden = !S.ui.renamingGroup;
@@ -474,19 +522,17 @@
     const link = g.token ? inviteLink(g.token) : "";
     if (els.inviteLink.value !== link) { els.inviteLink.value = link; els.copyStatus.textContent = ""; }
 
-    // regenerate invite (owner only)
     els.regenArea.replaceChildren();
     if (owner) {
       if (S.ui.confirmRegen) {
         els.regenArea.append(confirmBox("Lage en ny lenke? Den gamle lenken slutter å virke, men alle som allerede er med, blir med videre.",
           "Ja, lag ny lenke", regenerateInvite, () => { S.ui.confirmRegen = false; render(); }));
       } else {
-        els.regenArea.append(h("button", { class: "linkbtn", type: "button", text: "Lag ny lenke (den gamle slutter å virke)", dataset: { key: "regen" },
-          onclick: () => { S.ui.confirmRegen = true; render(); els.regenArea.querySelector(".confirm-box button")?.focus(); } }));
+        els.regenArea.append(h("button", { class: "btn ghost", type: "button", text: "Lag ny lenke (den gamle slutter å virke)", dataset: { key: "regen" },
+          onclick: () => { S.ui.confirmRegen = true; render(); els.regenArea.querySelector(".confirm button")?.focus(); } }));
       }
     }
 
-    // members
     els.membersTitle.textContent = `Medlemmer (${S.members.length})`;
     if (S.ui.confirmMember && !S.members.some(m => m.id === S.ui.confirmMember)) S.ui.confirmMember = null;
     const items = S.members.map(m => {
@@ -494,6 +540,7 @@
       if (m.id === S.uid) tags.push("deg");
       if (m.id === g.ownerId) tags.push("eier");
       const li = h("li", null,
+        avatar(m.id),
         h("span", { class: "mname", text: m.name || "Uten navn" }),
         tags.length ? h("span", { class: "tag", text: "(" + tags.join(", ") + ")" }) : null);
       if (owner && m.id !== S.uid) {
@@ -501,15 +548,14 @@
           li.append(confirmBox(`Fjerne ${m.name || "denne personen"} fra gruppen? Personen mister tilgang til listene, men kan bli med igjen med invitasjonslenken. Lag gjerne en ny lenke også.`,
             "Ja, fjern", () => removeMember(m.id), () => { S.ui.confirmMember = null; render(); }));
         } else {
-          li.append(h("button", { class: "linkbtn mact", type: "button", text: "Fjern", dataset: { key: "rm-" + m.id }, "aria-label": `Fjern ${m.name || "medlem"} fra gruppen`,
-            onclick: () => { S.ui.confirmMember = m.id; render(); els.memberList.querySelector(".confirm-box button")?.focus(); } }));
+          li.append(h("button", { class: "btn ghost mact", type: "button", text: "Fjern", dataset: { key: "rm-" + m.id }, "aria-label": `Fjern ${m.name || "medlem"} fra gruppen`,
+            onclick: () => { S.ui.confirmMember = m.id; render(); els.memberList.querySelector(".confirm button")?.focus(); } }));
         }
       }
       return li;
     });
     els.memberList.replaceChildren(...items);
 
-    // footer: leave, new group
     els.panelFoot.replaceChildren();
     if (S.ui.confirmLeave) {
       const alone = S.members.length <= 1;
@@ -521,10 +567,10 @@
       els.panelFoot.append(confirmBox(text, "Ja, forlat", leaveGroup, () => { S.ui.confirmLeave = false; render(); }));
     } else {
       els.panelFoot.append(
-        h("button", { class: "btn ghost small", type: "button", text: "Lag ny gruppe", dataset: { key: "newgroup" },
+        h("button", { class: "btn", type: "button", text: "Lag ny gruppe", dataset: { key: "newgroup" },
           onclick: () => { S.ui.panelOpen = false; els.createErr.textContent = ""; setView("create"); els.createName.focus(); } }),
-        h("button", { class: "linkbtn", type: "button", text: "Forlat gruppen", dataset: { key: "leave" },
-          onclick: () => { S.ui.confirmLeave = true; render(); els.panelFoot.querySelector(".confirm-box button")?.focus(); } }));
+        h("button", { class: "btn ghost", type: "button", text: "Forlat gruppen", dataset: { key: "leave" },
+          onclick: () => { S.ui.confirmLeave = true; render(); els.panelFoot.querySelector(".confirm button")?.focus(); } }));
     }
     if (focusKey) { const t = els.groupPanel.querySelector(`[data-key="${CSS.escape(focusKey)}"]`); if (t) t.focus(); }
   }
@@ -550,6 +596,7 @@
   }
   async function leaveGroup() {
     const g = currentGroup(); if (!g) return;
+    stopEditSession();
     const ok = await write(() => S.sb.from("group_members").delete().eq("group_id", g.id).eq("user_id", S.uid));
     if (!ok) return;
     S.groups = S.groups.filter(x => x.id !== g.id);
@@ -561,277 +608,737 @@
   }
 
   // ---------- add person ----------
-  els.addPersonBtn.addEventListener("click", () => {
-    els.addPerson.hidden = false; els.personErr.textContent = ""; els.newPersonName.focus();
-  });
-  els.cancelPerson.addEventListener("click", () => { els.addPerson.hidden = true; els.newPersonName.value = ""; els.personErr.textContent = ""; });
-  els.newPersonName.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); savePerson(); }
-    if (e.key === "Escape") els.cancelPerson.click();
-  });
-  els.savePerson.addEventListener("click", savePerson);
-  async function savePerson() {
+  els.addPersonBtn.addEventListener("click", () => { els.addPersonForm.hidden = false; els.addPersonErr.textContent = ""; els.newPersonName.focus(); });
+  els.cancelAddPerson.addEventListener("click", () => { els.addPersonForm.hidden = true; els.newPersonName.value = ""; els.addPersonErr.textContent = ""; });
+  els.newPersonName.addEventListener("keydown", (e) => { if (e.key === "Escape") els.cancelAddPerson.click(); });
+  els.addPersonForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
     const name = els.newPersonName.value.trim().slice(0, 60);
-    if (!name) { els.personErr.textContent = "Skriv inn et navn."; els.newPersonName.focus(); return; }
+    if (!name) { els.addPersonErr.textContent = "Skriv inn et navn."; els.newPersonName.focus(); return; }
     els.savePerson.disabled = true;
     const maxOrder = Math.max(0, ...[...S.people.values()].map(p => p.order || 0));
     const gid = S.gid;
-    const ok = await write(() => S.sb.from("people").insert({ group_id: gid, name, sort_order: maxOrder + 1 }));
+    const ok = await write(() => S.sb.from("people").insert({ group_id: gid, name, sort_order: maxOrder + 1 }), els.addPersonErr);
     els.savePerson.disabled = false;
-    if (ok) { els.newPersonName.value = ""; els.personErr.textContent = ""; els.addPerson.hidden = true; }
-  }
-
-  // ---------- hide toggle ----------
-  els.hideToggle.addEventListener("click", () => {
-    S.hide = !S.hide; lsSet(LS.hide, S.hide ? "1" : "0");
-    render();
+    if (ok) { els.newPersonName.value = ""; els.addPersonForm.hidden = true; }
   });
 
-  // ---------- cards ----------
-  function makeCard(pid) {
-    const head = h("div", { class: "head" });
-    const bar = h("div", { class: "bar", "aria-hidden": "true" }, h("span"));
-    const list = h("ul", { class: "wishes" });
-    const empty = h("p", { class: "empty" });
-    const title = h("input", { type: "text", placeholder: "Ønske", "aria-label": "Ønske", maxlength: "200", autocomplete: "off" });
-    const link = h("input", { type: "url", placeholder: "Lenke (valgfri)", "aria-label": "Lenke (valgfri)", inputmode: "url", autocomplete: "off" });
-    const price = h("input", { type: "text", placeholder: "Pris (valgfri)", "aria-label": "Pris (valgfri)", maxlength: "60", autocomplete: "off" });
-    const go = h("button", { class: "btn go", type: "submit", text: "Legg til ønske" });
-    const err = h("p", { class: "err", "aria-live": "polite" });
-    const form = h("form", { class: "addwish", novalidate: true }, title, h("div", { class: "two" }, link, price), go, err);
-    const card = { pid, sig: null, root: h("section", { class: "card", dataset: { pid } }, head, bar, list, empty, form), head, bar, list, empty, form, inputs: { title, link, price }, go, err };
-    form.addEventListener("submit", (e) => { e.preventDefault(); addWish(card); });
-    return card;
-  }
-  async function addWish(card) {
-    const { title, link, price } = card.inputs;
-    const t = title.value.trim().slice(0, 200);
-    if (!t) { card.err.textContent = "Skriv inn hva som ønskes."; title.focus(); return; }
-    const l = normalizeLink(link.value);
-    if (!l.ok) { card.err.textContent = LINK_ERR; link.focus(); return; }
-    card.err.textContent = "";
-    card.go.disabled = true;
-    const gid = S.gid;
-    const ok = await write(() => S.sb.from("wishes").insert({
-      group_id: gid, person_id: card.pid, title: t, link: l.value, price: price.value.trim().slice(0, 60), note: "",
-    }));
-    card.go.disabled = false;
-    if (ok) { title.value = ""; link.value = ""; price.value = ""; title.focus(); }
-  }
+  // ---------- hide toggle ----------
+  els.hideToggle.addEventListener("change", () => {
+    S.hide = els.hideToggle.checked; lsSet(LS.hide, S.hide ? "1" : "0");
+    S.ui.confirmWish = null; render();
+  });
 
-  function renderHead(card, person, list) {
-    const total = list.length, bought = list.filter(w => w.bought).length;
-    const mode = S.ui.renaming === person.id ? "rename" : S.ui.confirmPerson === person.id ? "confirm" : "normal";
-    const sig = JSON.stringify(mode === "rename" ? [mode] : [mode, person.name, total, bought, S.hide]);
-    // progress bar always updates
-    card.bar.hidden = S.hide || total === 0;
-    card.bar.firstChild.style.width = total ? (bought / total * 100) + "%" : "0";
-    if (sig === card.sig) return;
-    card.sig = sig;
-    const name = person.name || "Uten navn";
-    const head = card.head;
-    head.replaceChildren();
-    head.className = "head" + (mode === "rename" ? " editing" : mode === "confirm" ? " confirm" : "");
-    if (mode === "rename") {
-      const input = h("input", { type: "text", value: person.name, "aria-label": "Nytt navn", maxlength: "60", autocomplete: "off" });
-      const err = h("p", { class: "err" });
-      const save = async () => {
-        const v = input.value.trim().slice(0, 60);
-        if (!v) { err.textContent = "Navnet kan ikke være tomt."; input.focus(); return; }
-        if (v !== person.name) {
-          const ok = await write(() => S.sb.from("people").update({ name: v }).eq("id", person.id));
-          if (!ok) return;
-        }
-        S.ui.renaming = null; render();
-        const c = cards.get(person.id); c && c.head.querySelector("button")?.focus();
-      };
-      const cancel = () => { S.ui.renaming = null; render(); };
-      input.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); save(); }
-        if (e.key === "Escape") cancel();
-      });
-      head.append(h("div", { class: "rename-row" }, input,
-        h("button", { class: "btn small", type: "button", text: "Lagre", onclick: save }),
-        h("button", { class: "btn ghost small", type: "button", text: "Avbryt", onclick: cancel })), err);
-      requestAnimationFrame(() => { input.focus(); input.select(); });
-      return;
+  // ---------- images (private Storage bucket, signed URLs) ----------
+  const BUCKET = "wish-images";
+  const MAX_BYTES = 5 * 1024 * 1024;
+  const URL_TTL = 3600; // seconds
+  const urlCache = new Map(); // path -> { url, exp, retryAt }
+  const urlWanted = new Set();
+  let urlTimer = null, urlBusy = false;
+  // Returns a usable signed URL for an image path, or null while it is being
+  // fetched. URLs are fetched in batches and refreshed 5 minutes before expiry.
+  function imgUrl(path) {
+    if (!path) return null;
+    const now = Date.now();
+    const c = urlCache.get(path);
+    if (!c || now >= c.retryAt) { urlWanted.add(path); if (!urlTimer) urlTimer = setTimeout(fetchUrls, 0); }
+    return c && c.url && c.exp > now ? c.url : null;
+  }
+  async function fetchUrls() {
+    urlTimer = null;
+    if (urlBusy || !S.sb || !urlWanted.size) return;
+    urlBusy = true;
+    const paths = [...urlWanted]; urlWanted.clear();
+    const now = Date.now();
+    for (const p of paths) { const c = urlCache.get(p) || { url: null, exp: 0 }; c.retryAt = now + 30000; urlCache.set(p, c); }
+    let res;
+    try { res = await S.sb.storage.from(BUCKET).createSignedUrls(paths, URL_TTL); } catch (e) { res = { error: e }; }
+    urlBusy = false;
+    if (!res.error && Array.isArray(res.data)) {
+      const t = Date.now();
+      for (const d of res.data) {
+        if (d && d.path && d.signedUrl) urlCache.set(d.path, { url: d.signedUrl, exp: t + URL_TTL * 1000, retryAt: t + (URL_TTL - 300) * 1000 });
+      }
     }
-    const countText = S.hide ? `${total} ${total === 1 ? "ønske" : "ønsker"}` : `${bought} av ${total} kjøpt`;
-    head.append(h("h2", { text: name }), h("span", { class: "count", text: countText }));
-    head.append(h("div", { class: "card-actions" },
-      h("button", { class: "linkbtn", type: "button", text: "Gi nytt navn", onclick: () => { S.ui.renaming = person.id; S.ui.confirmPerson = null; render(); } }),
-      h("button", { class: "linkbtn", type: "button", text: "Slett kort", onclick: () => { S.ui.confirmPerson = person.id; S.ui.renaming = null; render(); card.head.querySelector(".confirm-box button")?.focus(); } })));
-    if (mode === "confirm") {
-      const msg = total
-        ? `Slette kortet for ${name} og ${total === 1 ? "ønsket" : total === 2 ? "begge ønskene" : `alle ${total} ønskene`} på det?`
-        : `Slette kortet for ${name}?`;
-      head.append(h("div", { class: "confirm-box", style: "flex-basis:100%;margin-top:10px" },
-        h("p", { text: msg }),
-        h("div", { class: "btns" },
-          h("button", { class: "btn danger small", type: "button", text: "Ja, slett", onclick: () => deletePerson(person.id) }),
-          h("button", { class: "btn ghost small", type: "button", text: "Nei", onclick: () => { S.ui.confirmPerson = null; render(); } }))));
+    if (urlWanted.size) urlTimer = setTimeout(fetchUrls, 0);
+    render();
+  }
+  // Scales to at most 1600 px on the longest side and encodes as JPEG.
+  async function prepImage(file) {
+    let src = null, url = null;
+    try {
+      try { src = await createImageBitmap(file, { imageOrientation: "from-image" }); }
+      catch {
+        url = URL.createObjectURL(file);
+        src = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+      }
+      const w0 = src.width || src.naturalWidth, h0 = src.height || src.naturalHeight;
+      const sc = Math.min(1, 1600 / Math.max(w0, h0));
+      const cw = Math.max(1, Math.round(w0 * sc)), ch = Math.max(1, Math.round(h0 * sc));
+      const cv = document.createElement("canvas"); cv.width = cw; cv.height = ch;
+      const cx = cv.getContext("2d"); cx.fillStyle = "#fff"; cx.fillRect(0, 0, cw, ch); cx.drawImage(src, 0, 0, cw, ch);
+      const blob = await new Promise(r => cv.toBlob(r, "image/jpeg", 0.85));
+      if (!blob) throw new Error("encode");
+      return blob;
+    } catch { throw { code: "unsupported_type" }; }
+    finally { if (src && src.close) src.close(); if (url) URL.revokeObjectURL(url); }
+  }
+  function assetErr(e) {
+    const code = e && (e.code || e.statusCode || e.status);
+    if (code === "too_large" || String(code) === "413") return "Bildet er for stort (maks 5 MB).";
+    if (code === "unsupported_type" || String(code) === "415") return "Bildet kunne ikke leses. Bruk JPG, PNG eller WebP.";
+    if (String(code) === "403" || String(code) === "401" || /row-level security|unauthorized/i.test((e && e.message) || "")) return "Du har ikke tilgang til å laste opp bilder i denne gruppen.";
+    if (String(code) === "429") return "For mange opplastinger på kort tid. Vent litt og prøv igjen.";
+    return "Fikk ikke lastet opp bildet. Sjekk nettet og prøv igjen.";
+  }
+  async function uploadImage(file, gid) {
+    const blob = await prepImage(file);
+    if (blob.size > MAX_BYTES) throw { code: "too_large" };
+    const path = gid + "/" + uuid() + ".jpg";
+    for (let attempt = 0; attempt < 2; attempt++) {
+      let res;
+      try { res = await S.sb.storage.from(BUCKET).upload(path, blob, { contentType: "image/jpeg", cacheControl: "3600", upsert: false }); }
+      catch (e) { res = { error: e }; }
+      if (!res.error) return path;
+      if (attempt === 0 && isNetErr(res.error, res.error.status)) { await sleep(800); continue; }
+      throw res.error;
     }
   }
-  async function deletePerson(pid) {
-    // The database deletes the person's wishes too (on delete cascade).
-    const ok = await write(() => S.sb.from("people").delete().eq("id", pid));
-    if (ok) {
-      S.ui.confirmPerson = null;
-      S.people.delete(pid);
-      for (const [id, w] of S.wishes) if (w.personId === pid) S.wishes.delete(id);
-      if (S.filter === pid) { S.filter = "all"; lsSet(LS.filter, "all"); }
-      render();
-    }
+  async function dropImages(paths) {
+    const list = paths.filter(Boolean);
+    if (!list.length || !S.sb) return;
+    try { await S.sb.storage.from(BUCKET).remove(list); } catch {}
+    for (const p of list) urlCache.delete(p);
   }
-
-  // ---------- wish rows ----------
-  function checkSvg() {
-    const NS = "http://www.w3.org/2000/svg";
-    const svg = document.createElementNS(NS, "svg");
-    svg.setAttribute("viewBox", "0 0 16 16"); svg.setAttribute("aria-hidden", "true");
-    const path = document.createElementNS(NS, "path");
-    for (const [k, v] of Object.entries({ d: "M3 8.5l3.2 3L13 4.5", fill: "none", stroke: "#fff", "stroke-width": "2.4", "stroke-linecap": "round", "stroke-linejoin": "round" })) path.setAttribute(k, v);
-    svg.append(path);
-    return svg;
-  }
-
-  function renderRow(row, w) {
-    const mode = S.ui.editingWish === w.id ? "edit" : S.ui.confirmWish === w.id ? "confirm" : "normal";
-    const buyer = w.boughtBy ? (w.boughtBy === S.uid ? "deg" : (S.names[w.boughtBy] || "noen")) : "noen";
-    const today = dayKey(osloParts(Date.now()));
-    const sig = JSON.stringify(mode === "edit" ? [mode] :
-      [mode, w.title, w.link, w.price, w.note, w.bought, w.boughtBy, w.boughtAt, buyer, S.hide, today]);
-    if (sig === row.sig) return;
-    row.sig = sig;
-    const li = row.el;
-    li.replaceChildren();
-    const showBought = !S.hide && w.bought;
-    li.className = "wish" + (showBought ? " bought" : "");
-
-    if (mode === "edit") { renderEdit(row, w); return; }
-
-    const locked = S.hide;
-    const cb = h("input", { type: "checkbox", checked: showBought, disabled: locked, "aria-label": `Kjøpt: ${w.title}` });
-    cb.addEventListener("change", () => toggleBought(w.id, cb.checked));
-    const box = h("span", { class: "box" }, checkSvg());
-    const check = h("label", { class: "check" + (locked ? " locked" : ""), title: S.hide ? "Skjult mens «Skjul hva som er kjøpt» er på" : null },
-      cb, box, h("span", { class: "cap", "aria-hidden": "true", text: "Kjøpt" }));
-
-    const meta = h("div", { class: "meta" });
-    const u = safeUrl(w.link);
-    if (u) meta.append(h("a", { href: u.href, target: "_blank", rel: "noopener noreferrer", text: u.hostname.replace(/^www\./, "") + " ↗" }));
-    if (w.price) meta.append(h("span", { class: "price", text: w.price }));
-
-    let boughtLine = null;
-    if (showBought) {
-      const when = fmtWhen(w.boughtAt);
-      boughtLine = h("p", { class: "boughtby", text: `Kjøpt av ${buyer}${when ? ", " + when : ""}` });
+  function field(label, control) { return h("label", { class: "field" }, h("span", { class: "lbl", text: label }), control); }
+  function imagePicker(initialPath) {
+    let file = null, removed = false, objUrl = null;
+    const input = h("input", { type: "file", accept: "image/*", class: "sr", tabindex: "-1", "aria-hidden": "true" });
+    const prev = h("img", { class: "pick-prev", alt: "" });
+    const pick = h("button", { class: "btn", type: "button", onclick: () => input.click() });
+    const rm = h("button", { class: "btn ghost", type: "button", onclick: () => { file = null; removed = true; paint(); } }, "Fjern bilde");
+    function paint() {
+      if (objUrl) { URL.revokeObjectURL(objUrl); objUrl = null; }
+      let src = null;
+      if (file) { objUrl = URL.createObjectURL(file); src = objUrl; }
+      else if (!removed && initialPath) src = imgUrl(initialPath);
+      const has = !!file || (!removed && !!initialPath);
+      prev.hidden = !src; if (src) prev.src = src; else prev.removeAttribute("src");
+      pick.textContent = has ? "Bytt bilde" : "📷 Velg bilde";
+      rm.hidden = !has;
     }
-
-    const body = h("div", { class: "wbody" },
-      h("div", { class: "wtitle", text: w.title || "Uten navn" }),
-      meta.childNodes.length ? meta : null,
-      w.note ? h("p", { class: "note", text: w.note }) : null,
-      boughtLine,
-      mode === "confirm" ? h("div", { class: "confirm-box" },
-        h("p", { text: `Slette «${w.title}»?` }),
-        h("div", { class: "btns" },
-          h("button", { class: "btn danger small", type: "button", text: "Ja", onclick: () => deleteWish(w.id) }),
-          h("button", { class: "btn ghost small", type: "button", text: "Nei", onclick: () => { S.ui.confirmWish = null; render(); } }))) : null);
-
-    li.append(check, body);
-    if (mode !== "confirm") {
-      li.append(h("div", { class: "wactions" },
-        h("button", { class: "linkbtn", type: "button", "aria-label": `Endre «${w.title}»`, title: "Endre", text: "✏️",
-          onclick: () => { S.ui.editingWish = w.id; S.ui.confirmWish = null; render(); } }),
-        h("button", { class: "linkbtn", type: "button", "aria-label": `Slett «${w.title}»`, text: "Slett",
-          onclick: () => { S.ui.confirmWish = w.id; S.ui.editingWish = null; render(); row.el.querySelector(".confirm-box button")?.focus(); } })));
-    }
-  }
-
-  function renderEdit(row, w) {
-    const title = h("input", { type: "text", value: w.title, "aria-label": "Ønske", maxlength: "200", autocomplete: "off" });
-    const link = h("input", { type: "url", value: w.link, placeholder: "Lenke (valgfri)", "aria-label": "Lenke (valgfri)", inputmode: "url", autocomplete: "off" });
-    const price = h("input", { type: "text", value: w.price, placeholder: "Pris (valgfri)", "aria-label": "Pris (valgfri)", maxlength: "60", autocomplete: "off" });
-    const err = h("p", { class: "err", "aria-live": "polite" });
-    const cancel = () => { S.ui.editingWish = null; row.sig = null; render(); };
-    const save = async () => {
-      const t = title.value.trim().slice(0, 200);
-      if (!t) { err.textContent = "Ønsket kan ikke være tomt."; title.focus(); return; }
-      const l = normalizeLink(link.value);
-      if (!l.ok) { err.textContent = LINK_ERR; link.focus(); return; }
-      const ok = await write(() => S.sb.from("wishes").update({ title: t, link: l.value, price: price.value.trim().slice(0, 60) }).eq("id", w.id));
-      if (ok) { S.ui.editingWish = null; row.sig = null; render(); }
+    input.addEventListener("change", () => { const f = input.files && input.files[0]; input.value = ""; if (f) { file = f; removed = false; paint(); } });
+    paint();
+    return {
+      el: h("div", { class: "field" }, h("span", { class: "lbl", text: "Bilde (valgfritt)" }), h("span", { class: "hint", text: "Dersom lenken ikke virker, legg inn et bilde av ønsket." }), h("div", { class: "pick" }, prev, pick, rm, input)),
+      state: () => ({ file, removed }),
+      reset: () => { file = null; removed = false; initialPath = null; paint(); },
     };
-    for (const i of [title, link, price]) i.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); save(); }
-      if (e.key === "Escape") cancel();
-    });
-    row.el.append(h("div", { class: "wedit" }, title, h("div", { class: "two" }, link, price),
-      h("div", { class: "btns" },
-        h("button", { class: "btn small", type: "button", text: "Lagre", onclick: save }),
-        h("button", { class: "btn ghost small", type: "button", text: "Avbryt", onclick: cancel })), err));
-    requestAnimationFrame(() => title.focus());
+  }
+  // lightbox
+  const lbImg = h("img", { alt: "" }), lbCap = h("div", { class: "cap" });
+  const lbClose = h("button", { class: "x", type: "button", "aria-label": "Lukk bildet" }, "×");
+  const lb = h("div", { class: "lightbox", hidden: true, role: "dialog", "aria-modal": "true", "aria-label": "Bilde" }, lbClose, lbImg, lbCap);
+  document.body.appendChild(lb);
+  let lbReturn = null;
+  function openLightbox(src, caption) {
+    lbReturn = document.activeElement; lbImg.src = src; lbImg.alt = caption || ""; lbCap.textContent = caption || "";
+    lb.hidden = false; lbClose.focus();
+  }
+  function closeLightbox() { if (lb.hidden) return; lb.hidden = true; lbImg.removeAttribute("src"); if (lbReturn && lbReturn.focus) lbReturn.focus(); }
+  lb.addEventListener("click", closeLightbox);
+  document.addEventListener("keydown", e => { if (e.key === "Escape") closeLightbox(); });
+
+  // ---------- buying ----------
+  async function setBought(w, on) {
+    if (on) return write(() => S.sb.from("wishes").update({ bought: true }).eq("id", w.id));
+    // Unticking: clear the checkbox purchase and your own counted purchase.
+    // Other members' counted purchases can only be undone by themselves.
+    const mine = myPurchaseRow(w);
+    const others = (S.purchases.get(w.id) || []).filter(p => p.userId !== S.uid);
+    if (!w.bought && !mine) {
+      const who = others.map(p => S.names[p.userId] || "noen").join(" og ");
+      toast(`Kjøpt av ${who}. Bare den som har kjøpt, kan angre kjøpet.`);
+      return null;
+    }
+    let ok = true;
+    if (w.bought) ok = !!(await write(() => S.sb.from("wishes").update({ bought: false }).eq("id", w.id)));
+    if (ok && mine) ok = !!(await write(() => S.sb.from("wish_purchases").delete().eq("wish_id", w.id).eq("user_id", S.uid)));
+    return ok;
+  }
+  // +1 or -1 on "Jeg har kjøpt". The server refuses going above the quantity.
+  async function stepMine(w, d) {
+    const row = myPurchaseRow(w);
+    if (d > 0) {
+      return row
+        ? write(() => S.sb.from("wish_purchases").update({ n: row.n + 1 }).eq("wish_id", w.id).eq("user_id", S.uid))
+        : write(() => S.sb.from("wish_purchases").insert({ wish_id: w.id, group_id: S.gid, n: 1 }));
+    }
+    if (row && row.n > 1) return write(() => S.sb.from("wish_purchases").update({ n: row.n - 1 }).eq("wish_id", w.id).eq("user_id", S.uid));
+    if (row) return write(() => S.sb.from("wish_purchases").delete().eq("wish_id", w.id).eq("user_id", S.uid));
+    if (w.bought && w.boughtBy === S.uid) return write(() => S.sb.from("wishes").update({ bought: false }).eq("id", w.id));
+    return null;
   }
 
-  async function toggleBought(id, checked) {
-    if (S.hide) return;
-    // The database fills in bought_by (the signed-in user) and bought_at (now).
-    const ok = await write(() => S.sb.from("wishes").update({ bought: checked }).eq("id", id));
-    if (!ok) { const r = rows.get(id); if (r) r.sig = null; render(); }
+  // ---------- edit locks: one editor per wish ----------
+  // The lock lives in wish_locks and is only written through RPCs. It is
+  // taken when the editor opens, renewed on activity (at most every 20 s),
+  // and released on save, cancel, click outside and when the tab closes.
+  // After 7 minutes without activity the editor saves and closes itself.
+  const LOCK_IDLE_MS = 7 * 60 * 1000;
+  const TAB = (() => { const a = new Uint8Array(6); crypto.getRandomValues(a); return [...a].map(b => b.toString(16).padStart(2, "0")).join(""); })();
+  let editSess = null;
+  function lockOf(wid) { const l = S.locks.get(wid); return l && typeof l.expiresAt === "number" && l.expiresAt > Date.now() ? l : null; }
+  function lockedByOther(wid) { const l = lockOf(wid); if (!l || !l.by || l.by === S.uid) return null; return l; }
+  const lockedMsg = (by) => displayName(by) + " redigerer dette ønsket nå. Prøv igjen litt senere.";
+  function requestEdit(w) {
+    const other = lockedByOther(w.id);
+    if (other) { toast(lockedMsg(other.by)); return; }
+    stopEditSession();
+    const sess = { wid: w.id, lastActivity: Date.now(), lastPush: Date.now(), ok: false };
+    editSess = sess;
+    sess.timer = setInterval(() => tickEdit(sess), 1000);
+    S.ui.editingWish = w.id; S.ui.confirmWish = null; render();
+    claimLock(sess);
   }
-  async function deleteWish(id) {
-    const ok = await write(() => S.sb.from("wishes").delete().eq("id", id));
-    if (ok) { S.ui.confirmWish = null; S.wishes.delete(id); render(); }
+  async function lockRpc(name, wid) {
+    try { return await S.sb.rpc(name, { wid, tab: TAB }); } catch (e) { return { error: e, status: 0 }; }
   }
+  async function claimLock(sess) {
+    if (!S.uid || !S.sb) return;
+    const res = await lockRpc("acquire_wish_lock", sess.wid);
+    if (editSess !== sess) { if (res.data && res.data.ok) lockRpc("release_wish_lock", sess.wid); return; }
+    if (res.error || !res.data) return; // locking unavailable: editing still works
+    if (!res.data.ok) return lostLock(sess, res.data.locked_by);
+    sess.ok = true;
+  }
+  function lostLock(sess, by) {
+    if (editSess !== sess) return;
+    stopEditSession(true);
+    const r = rowEls.get(sess.wid); if (r) r.sig = null;
+    S.ui.editingWish = null; render();
+    toast((by && by !== S.uid ? displayName(by) : "Noen andre") + " begynte å redigere ønsket samtidig. Prøv igjen litt senere.");
+  }
+  function stopEditSession(skipRelease) {
+    const sess = editSess; if (!sess) return;
+    editSess = null; clearInterval(sess.timer);
+    if (sess.ok && !skipRelease) lockRpc("release_wish_lock", sess.wid).then(() => scheduleRefetch(0));
+  }
+  function markActive() { if (editSess) editSess.lastActivity = Date.now(); }
+  function tickEdit(sess) {
+    if (editSess !== sess) return;
+    const left = LOCK_IDLE_MS - (Date.now() - sess.lastActivity);
+    if (sess.tickEl) {
+      if (left < 60000) {
+        const sec = Math.max(0, Math.ceil(left / 1000));
+        sess.tickEl.textContent = "Lukkes om 0:" + String(sec).padStart(2, "0") + " uten aktivitet, endringene lagres";
+        sess.headEl.classList.add("warn");
+      } else {
+        sess.tickEl.textContent = "Du redigerer · lukkes etter 7 min uten aktivitet";
+        sess.headEl.classList.remove("warn");
+      }
+    }
+    if (left <= 0) { if (sess.save) sess.save(true); else { stopEditSession(); S.ui.editingWish = null; render(); } return; }
+    if (sess.ok && !sess.pushing && sess.lastActivity - sess.lastPush > 20000) {
+      sess.pushing = true; sess.lastPush = sess.lastActivity;
+      lockRpc("renew_wish_lock", sess.wid).then(res => {
+        sess.pushing = false;
+        if (res.data && res.data.ok === false) lostLock(sess, res.data.locked_by);
+      });
+    }
+  }
+  // Click outside the wish being edited = save and close. A click on another
+  // wish (or a card name) only closes this one; it takes a second click.
+  let swallowClick = false;
+  document.addEventListener("pointerdown", e => {
+    if (!S.ui.editingWish || !editSess || !editSess.save) return;
+    const r = rowEls.get(S.ui.editingWish);
+    if (!r || r.el.contains(e.target)) return;
+    if (e.target.closest(".lightbox,.toast")) return;
+    if (e.target.closest(".wish .body, .wish .icon-btn, .card-head h2")) swallowClick = true;
+    editSess.save();
+  }, true);
+  document.addEventListener("click", e => {
+    if (!swallowClick) return;
+    swallowClick = false; e.stopPropagation(); e.preventDefault();
+  }, true);
+  // Release the lock when the tab closes. supabase-js calls may not finish
+  // during unload, so this is a plain fetch with keepalive to the RPC
+  // endpoint, sent with the publishable key and the user's access token.
+  window.addEventListener("pagehide", () => {
+    if (!editSess || !editSess.ok || !S.token) return;
+    try {
+      fetch(S.url.replace(/\/+$/, "") + "/rest/v1/rpc/release_wish_lock", {
+        method: "POST", keepalive: true,
+        headers: { "Content-Type": "application/json", apikey: S.key, Authorization: "Bearer " + S.token },
+        body: JSON.stringify({ wid: editSess.wid, tab: TAB }),
+      }).catch(() => {});
+    } catch {}
+  });
 
-  // ---------- main render ----------
+  // ---------- rendering ----------
   function render() {
     renderViews();
     renderBanner();
-    renderSummary();
     if (S.fatal) { els.state.hidden = false; els.state.textContent = "Listen kan ikke vises her."; return; }
     if (S.view === "loading") { els.state.hidden = false; els.state.textContent = "Henter listen …"; return; }
     if (S.view !== "list") { els.state.hidden = true; return; }
 
-    renderToolbar();
+    els.hideToggle.checked = S.hide;
     renderPanel();
-    if (!S.loaded) { els.state.hidden = false; els.state.textContent = "Henter listen …"; els.pills.hidden = true; els.addPersonBtn.hidden = true; return; }
-    els.addPersonBtn.hidden = false;
-
+    if (!S.loaded) { els.state.hidden = false; els.state.textContent = "Henter listen …"; els.filters.hidden = true; els.addPersonBtn.disabled = true; return; }
+    els.addPersonBtn.disabled = false;
+    els.filters.hidden = false;
     const people = sortedPeople();
     if (S.filter !== "all" && !S.people.has(S.filter)) S.filter = "all";
-    renderPills(people);
+    renderFilters(people);
+    renderCards(people);
+    scheduleLockExpiry();
+  }
 
+  // Re-render the moment someone else's lock runs out.
+  let lockTimer = null;
+  function scheduleLockExpiry() {
+    clearTimeout(lockTimer);
+    const now = Date.now();
+    let next = Infinity;
+    for (const l of S.locks.values()) if (l.expiresAt > now && l.expiresAt < next) next = l.expiresAt;
+    if (next < Infinity) lockTimer = setTimeout(render, Math.min(next - now + 50, 2 ** 31 - 1));
+  }
+
+  function renderFilters(people) {
+    const box = els.filters;
+    if (S.dragging) return;
+    if (!drag) clearGhosts();
+    const items = [{ id: "all", label: "Alle", n: [...S.wishes.values()].filter(w => S.people.has(w.personId)).length }]
+      .concat(people.map(p => ({ id: p.id, label: p.name || "Uten navn", n: wishesOf(p.id).length })));
+    const sig = JSON.stringify([S.filter, items]);
+    if (box.dataset.sig === sig) return;
+    box.dataset.sig = sig;
+    box.replaceChildren(...items.map(it => h("button", {
+      type: "button", class: "chip", "aria-pressed": String(S.filter === it.id),
+      "data-pid": it.id === "all" ? null : it.id,
+      title: it.id === "all" ? null : "Hold inne og dra for å endre rekkefølgen",
+      onclick: () => { if (suppressClick) return; S.filter = it.id; lsSet(LS.filter, it.id); render(); },
+      onkeydown: it.id === "all" ? null : (e) => {
+        // Keyboard alternative to dragging: Alt + arrow left/right.
+        if (!e.altKey || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
+        e.preventDefault();
+        const ids = people.map(p => p.id), i = ids.indexOf(it.id), j = i + (e.key === "ArrowLeft" ? -1 : 1);
+        if (j < 0 || j >= ids.length) return;
+        [ids[i], ids[j]] = [ids[j], ids[i]];
+        saveOrder(ids).then(() => box.querySelector(`[data-pid="${CSS.escape(it.id)}"]`)?.focus());
+      },
+    }, it.label, h("span", { class: "n", text: String(it.n) }))));
+  }
+
+  function makeCard(pid) {
+    const c = { pid, head: h("div", { class: "card-head" }), summary: h("div", { class: "summary" }), list: h("ul", { class: "list" }), empty: h("div", { class: "empty" }), headSig: null, headMode: null };
+    const title = h("input", { type: "text", placeholder: "F.eks. Lego-sett", maxlength: "200", autocomplete: "off" });
+    const link = h("input", { type: "text", inputmode: "url", placeholder: "https://…", maxlength: "1000", autocomplete: "off" });
+    const price = h("input", { type: "text", placeholder: "F.eks. 599 kr", maxlength: "60", autocomplete: "off" });
+    const qty = h("input", { type: "number", min: "1", max: "99", step: "1", value: "1", inputmode: "numeric" });
+    const priceField = field("Pris (valgfri)", price);
+    qty.addEventListener("input", () => { priceField.firstChild.textContent = (parseQty(qty.value) || 1) > 1 ? "Pris per stk. (valgfri)" : "Pris (valgfri)"; });
+    const pic = imagePicker(null);
+    const err = h("div", { class: "ferr", role: "alert" });
+    const btn = h("button", { class: "btn primary", type: "submit" }, "Lagre");
+    const openBtn = h("button", { class: "btn add-open", type: "button" }, "+ Nytt ønske");
+    const bar = h("div", { class: "addbar" }, openBtn);
+    const cancelBtn = h("button", { class: "btn", type: "button", onclick: () => { closeForm(); openBtn.focus(); } }, "Avbryt");
+    const form = h("form", { class: "addform", novalidate: true, onsubmit: async (ev) => {
+      ev.preventDefault();
+      const t = title.value.trim().slice(0, 200);
+      if (!t) { err.textContent = "Skriv inn hva ønsket er."; title.focus(); return; }
+      const l = normalizeLink(link.value);
+      if (!l.ok) { err.textContent = l.msg; link.focus(); return; }
+      const q = parseQty(qty.value);
+      if (q == null) { err.textContent = "Antall må være et helt tall fra 1 til 99."; qty.focus(); return; }
+      err.textContent = "";
+      btn.disabled = true;
+      const gid = S.gid;
+      let image = "";
+      const st = pic.state();
+      if (st.file) {
+        btn.textContent = "Laster opp bilde …";
+        try { image = await uploadImage(st.file, gid); }
+        catch (e) { err.textContent = assetErr(e); btn.disabled = false; btn.textContent = "Lagre"; return; }
+      }
+      const ok = await write(() => S.sb.from("wishes").insert({
+        group_id: gid, person_id: pid, title: t, link: l.value, price: price.value.trim().slice(0, 60), note: "", quantity: q, image_path: image,
+      }), err);
+      btn.disabled = false; btn.textContent = "Lagre";
+      if (ok) { closeForm(); openBtn.focus(); }
+      else if (image) dropImages([image]);
+    } }, field("Ønske", title), field("Lenke (valgfri)", link), h("div", { class: "qp" }, field("Antall", qty), priceField), pic.el, h("div", { class: "go" }, btn, cancelBtn), err);
+    form.hidden = true;
+    function closeForm() { title.value = ""; link.value = ""; price.value = ""; qty.value = "1"; priceField.firstChild.textContent = "Pris (valgfri)"; err.textContent = ""; pic.reset(); form.hidden = true; bar.hidden = false; }
+    openBtn.addEventListener("click", () => { bar.hidden = true; form.hidden = false; title.focus(); });
+    form.addEventListener("keydown", e => { if (e.key === "Escape") { closeForm(); openBtn.focus(); } });
+    c.form = form; c.bar = bar;
+    c.root = h("section", { class: "card" }, c.head, c.summary, c.list, c.empty, bar, form);
+    return c;
+  }
+
+  function renderHead(c, p, wishes) {
+    const name = p.name || "Uten navn";
+    const mode = S.ui.renaming === p.id ? "rename" : S.ui.confirmPerson === p.id ? "confirm" : "view";
+    if (mode === "rename" && c.headMode === "rename") return; // keep the input untouched
+    const sig = JSON.stringify([mode, name, wishes.length]);
+    if (c.headSig === sig) return;
+    c.headSig = sig; c.headMode = mode;
+    const nodes = [];
+    if (mode === "rename") {
+      const inp = h("input", { type: "text", value: name, maxlength: "60", "aria-label": "Nytt navn" });
+      const err = h("div", { class: "ferr", role: "alert" });
+      const save = async () => {
+        const v = inp.value.trim().slice(0, 60);
+        if (!v) { err.textContent = "Navnet kan ikke være tomt."; return; }
+        if (v === name) { S.ui.renaming = null; c.headSig = null; render(); return; }
+        const ok = await write(() => S.sb.from("people").update({ name: v }).eq("id", p.id), err);
+        if (ok) { S.ui.renaming = null; c.headSig = null; render(); }
+      };
+      const cancel = () => { S.ui.renaming = null; c.headSig = null; render(); };
+      inp.addEventListener("keydown", e => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); save(); } else if (e.key === "Escape") { cancel(); } });
+      nodes.push(h("div", { class: "rename" }, inp, h("button", { class: "btn primary", type: "button", onclick: save }, "Lagre"), h("button", { class: "btn", type: "button", onclick: cancel }, "Avbryt")), err);
+      setTimeout(() => { inp.focus(); inp.select(); }, 0);
+    } else {
+      const startRename = () => { S.ui.renaming = p.id; S.ui.confirmPerson = null; c.headSig = null; render(); };
+      nodes.push(h("h2", { text: name, class: "clickable", title: "Klikk for å gi nytt navn", onclick: startRename }));
+      nodes.push(h("div", { class: "actions" },
+        h("button", { class: "icon-btn", type: "button", title: "Gi nytt navn", "aria-label": "Gi nytt navn til " + name, onclick: startRename }, "✏️"),
+        h("button", { class: "icon-btn", type: "button", title: "Slett kortet", "aria-label": "Slett kortet til " + name, onclick: () => { S.ui.confirmPerson = p.id; S.ui.renaming = null; c.headSig = null; render(); c.head.querySelector(".confirm .btn")?.focus(); } }, "🗑")));
+      if (mode === "confirm") {
+        const err = h("div", { class: "ferr", role: "alert" });
+        const n = wishes.length;
+        nodes.push(h("div", { class: "confirm" },
+          h("span", { text: "Slette kortet til " + name + (n ? " og " + (n === 1 ? "det ene ønsket" : "alle " + n + " ønskene") : "") + "?" }),
+          h("button", { class: "btn danger", type: "button", onclick: async (e) => { e.target.disabled = true; const ok = await deletePerson(p.id, err); if (!ok) e.target.disabled = false; } }, "Ja, slett"),
+          h("button", { class: "btn", type: "button", onclick: () => { S.ui.confirmPerson = null; c.headSig = null; render(); } }, "Nei")
+        ), err);
+      }
+    }
+    c.head.replaceChildren(...nodes);
+  }
+  async function deletePerson(pid, errEl) {
+    // Images first (the database cannot delete Storage objects), then the
+    // person; the database deletes the wishes, purchases and locks with it.
+    if (editSess && S.wishes.get(editSess.wid)?.personId === pid) { stopEditSession(); S.ui.editingWish = null; }
+    await dropImages(wishesOf(pid).map(w => w.imagePath));
+    const ok = await write(() => S.sb.from("people").delete().eq("id", pid), errEl);
+    if (!ok) return false;
+    S.ui.confirmPerson = null;
+    S.people.delete(pid);
+    for (const [id, w] of S.wishes) if (w.personId === pid) S.wishes.delete(id);
+    if (S.filter === pid) { S.filter = "all"; lsSet(LS.filter, "all"); }
+    render();
+    return true;
+  }
+
+  function renderRow(w) {
+    const mode = S.ui.editingWish === w.id ? "edit" : "view";
+    let r = rowEls.get(w.id);
+    if (r && mode === "edit" && r.mode === "edit") return r.el; // keep edit inputs while typing
+    const href = safeHref(w.link);
+    const q = qtyOf(w), multi = q > 1;
+    const purch = purchasesOf(w), got = purch.reduce((s, x) => s + x.n, 0);
+    const bought = got >= q;
+    const mine = (purch.find(x => x.id === S.uid) || {}).n || 0;
+    let label = "";
+    if (!S.hide && purch.length) {
+      const last = purch.reduce((a, x) => (x.at || 0) > (a.at || 0) ? x : a, purch[0]);
+      if (!multi) label = "Kjøpt av " + nameFor(last.id) + (last.at ? ", " + when(last.at) : "");
+      else label = "Kjøpt av " + purch.map(x => nameFor(x.id) + " (" + x.n + ")").join(", ") + (last.at ? ", sist " + when(last.at) : "");
+    }
+    const img = w.imagePath ? imgUrl(w.imagePath) : null;
+    const lockBy = mode === "view" ? (lockedByOther(w.id) || {}).by || null : null;
+    const sig = JSON.stringify([mode, lockBy, lockBy ? displayName(lockBy) + initialsFor(lockBy) : "", S.ui.confirmWish === w.id, w.title, href, w.price, w.note, w.imagePath, img, q, got, mine, bought, label, S.hide]);
+    if (r && r.sig === sig) return r.el;
+    if (!r) { r = { el: h("li", { class: "wish" }) }; rowEls.set(w.id, r); }
+    r.sig = sig; r.mode = mode;
+    const el = r.el;
+    el.className = "wish" + (bought && !S.hide ? " bought" : "") + (lockBy ? " locked" : "");
+    const title = w.title || "Uten tittel";
+
+    if (mode === "edit") { renderEdit(r, w); return el; }
+
+    let lead;
+    if (multi) {
+      lead = h("div", { class: "count" + (S.hide ? " locked" : bought ? " done" : ""), title: S.hide ? "Skjult" : got + " av " + q + " kjøpt", "aria-label": S.hide ? "Antall: " + q : got + " av " + q + " kjøpt" }, S.hide ? "" : got + "/" + q);
+    }
+    const cb = h("input", { type: "checkbox", "aria-label": "Kjøpt: " + title });
+    cb.checked = bought && !S.hide;
+    cb.disabled = S.hide;
+    if (S.hide) cb.title = "Låst mens kjøpt-informasjon er skjult";
+    cb.addEventListener("change", async () => {
+      const want = cb.checked;
+      cb.disabled = true;
+      const ok = await setBought(w, want);
+      if (!ok) { cb.checked = !want; r.sig = null; }
+      cb.disabled = S.hide;
+    });
+
+    const meta = [];
+    if (w.price) {
+      const tot = totalPrice(w.price, q);
+      meta.push(h("span", { class: "price", text: multi ? w.price + " per stk." + (tot ? " · " + tot + " totalt" : "") : w.price }));
+    }
+    if (href) meta.push(h("a", { href, target: "_blank", rel: "noopener noreferrer" }, "Se hos " + siteName(href) + " ↗"));
+
+    const body = h("div", { class: "body" },
+      h("div", { class: "title" }, title, multi ? h("span", { class: "qtychip", text: "× " + q }) : null,
+        (!href && !w.imagePath) ? h("span", { class: "moreinfo", text: " (mer info kommer)" }) : null),
+      meta.length ? h("div", { class: "meta" }, ...meta) : null,
+      w.note ? h("div", { class: "note", text: w.note }) : null,
+      label ? h("div", { class: "boughtby", text: label }) : null
+    );
+    if (multi && !S.hide) {
+      const left = Math.max(0, q - got);
+      const step = async (d, btn) => { btn.disabled = true; const ok = await stepMine(w, d); if (!ok) { btn.disabled = false; r.sig = null; } };
+      const minus = h("button", { type: "button", "aria-label": "Ett færre kjøpt av meg", disabled: mine <= 0 }, "−");
+      const plus = h("button", { type: "button", "aria-label": "Ett til kjøpt av meg", disabled: left <= 0 }, "+");
+      minus.addEventListener("click", () => step(-1, minus));
+      plus.addEventListener("click", () => step(1, plus));
+      body.appendChild(h("div", { class: "stepper" },
+        h("span", { text: "Jeg har kjøpt" }),
+        h("span", { class: "ctl" }, minus, h("output", { text: String(mine) }), plus),
+        h("span", { class: "left", text: left ? left + " igjen" : "Alle er kjøpt 🎉" })));
+    }
+    if (lockBy) body.insertBefore(h("div", { class: "editing" }, avatar(lockBy), h("span", { class: "dots", text: displayName(lockBy) + " redigerer" })), body.firstChild);
+    body.classList.add("clickable");
+    body.title = lockBy ? displayName(lockBy) + " redigerer dette ønsket" : "Klikk for å redigere";
+    body.addEventListener("click", e => {
+      if (e.target.closest("a,button,input,select,.confirm")) return;
+      const sel = window.getSelection && String(window.getSelection());
+      if (sel) return;
+      requestEdit(w);
+    });
+    const thumb = w.imagePath ? h("button", { class: "thumb", type: "button", "aria-label": "Vis bilde av " + title, onclick: () => { if (img) openLightbox(img, title); } },
+      img ? h("img", { src: img, alt: "", loading: "lazy", referrerpolicy: "no-referrer", onerror: e => { const b = e.target.closest(".thumb"); if (b) b.hidden = true; } }) : null) : null;
+    if (S.ui.confirmWish === w.id) {
+      const err = h("div", { class: "ferr", role: "alert" });
+      body.appendChild(h("div", { class: "confirm" },
+        h("span", { text: "Slette «" + title + "»?" }),
+        h("button", { class: "btn danger", type: "button", onclick: async (e) => {
+          const o = lockedByOther(w.id); if (o) { toast(lockedMsg(o.by)); return; }
+          e.target.disabled = true;
+          await dropImages([w.imagePath]);
+          const ok = await write(() => S.sb.from("wishes").delete().eq("id", w.id), err);
+          if (ok) { S.ui.confirmWish = null; S.wishes.delete(w.id); render(); } else e.target.disabled = false;
+        } }, "Ja"),
+        h("button", { class: "btn", type: "button", onclick: () => { S.ui.confirmWish = null; r.sig = null; render(); } }, "Nei")
+      ));
+      body.appendChild(err);
+    }
+    const tools = h("div", { class: "tools" },
+      h("button", { class: "icon-btn", type: "button", title: lockBy ? displayName(lockBy) + " redigerer" : "Rediger", "aria-label": "Rediger " + title, "aria-disabled": lockBy ? "true" : null, onclick: () => requestEdit(w) }, "✏️"),
+      h("button", { class: "icon-btn", type: "button", title: lockBy ? displayName(lockBy) + " redigerer" : "Slett", "aria-label": "Slett " + title, "aria-disabled": lockBy ? "true" : null, onclick: () => {
+        const o = lockedByOther(w.id); if (o) { toast(lockedMsg(o.by)); return; }
+        S.ui.confirmWish = w.id; render(); r.el.querySelector(".confirm .btn")?.focus();
+      } }, "🗑"));
+    el.replaceChildren(...[multi ? h("div", { class: "chk" }, lead) : h("label", { class: "chk" }, cb), thumb, body, tools].filter(Boolean));
+    return el;
+  }
+
+  function renderEdit(r, w) {
+    const el = r.el, q = qtyOf(w);
+    const t = h("input", { type: "text", value: w.title, maxlength: "200" });
+    const l = h("input", { type: "text", inputmode: "url", value: w.link, placeholder: "https://…", maxlength: "1000" });
+    const pr = h("input", { type: "text", value: w.price, placeholder: "F.eks. 599 kr", maxlength: "60" });
+    const qn = h("input", { type: "number", min: "1", max: "99", step: "1", value: String(q), inputmode: "numeric" });
+    const prField = field(q > 1 ? "Pris per stk. (valgfri)" : "Pris (valgfri)", pr);
+    qn.addEventListener("input", () => { prField.firstChild.textContent = (parseQty(qn.value) || 1) > 1 ? "Pris per stk. (valgfri)" : "Pris (valgfri)"; });
+    const who = h("select", {},
+      ...sortedPeople().map(p => { const o = h("option", { value: p.id, text: p.name || "Uten navn" }); if (p.id === w.personId) o.selected = true; return o; }));
+    const pic = imagePicker(w.imagePath);
+    const saveBtn = h("button", { class: "btn primary", type: "submit" }, "Lagre");
+    const err = h("div", { class: "ferr", role: "alert" });
+    const close = () => {
+      if (editSess && editSess.wid === w.id) stopEditSession();
+      if (S.ui.editingWish === w.id) S.ui.editingWish = null;
+      r.sig = null; render();
+    };
+    const cancel = close;
+    const IDLE = "Redigeringen ble lukket etter 7 minutter uten aktivitet.";
+    let saving = false;
+    const save = async (auto) => {
+      if (saving) return;
+      saving = true;
+      try { await doSave(auto); } finally { saving = false; }
+    };
+    const doSave = async (auto) => {
+      auto = auto === true;
+      const cur = S.wishes.get(w.id) || w; // latest copy, in case it changed meanwhile
+      const bail = msg => { if (auto) { close(); toast(IDLE + " " + msg); return true; } return false; };
+      const tv = t.value.trim().slice(0, 200);
+      if (!tv) { if (bail("Endringene ble ikke lagret fordi ønsket manglet navn.")) return; err.textContent = "Ønsket må ha et navn."; t.focus(); return; }
+      const lv = normalizeLink(l.value);
+      if (!lv.ok) { if (bail("Endringene ble ikke lagret fordi lenken var ugyldig.")) return; err.textContent = lv.msg; l.focus(); return; }
+      const nq = parseQty(qn.value);
+      if (nq == null) { if (bail("Endringene ble ikke lagret fordi antallet var ugyldig.")) return; err.textContent = "Antall må være et helt tall fra 1 til 99."; qn.focus(); return; }
+      const patch = {};
+      if (tv !== w.title) patch.title = tv;
+      if (lv.value !== w.link) patch.link = lv.value;
+      const pv = pr.value.trim().slice(0, 60);
+      if (pv !== w.price) patch.price = pv;
+      if (nq !== q) patch.quantity = nq;
+      if (who.value && who.value !== cur.personId && S.people.has(who.value)) patch.person_id = who.value;
+      const st = pic.state();
+      let newImg = null;
+      if (st.file) {
+        saveBtn.disabled = true; saveBtn.textContent = "Laster opp …";
+        try { newImg = await uploadImage(st.file, S.gid); }
+        catch (e) { if (bail("Bildet kunne ikke lastes opp.")) return; err.textContent = assetErr(e); saveBtn.disabled = false; saveBtn.textContent = "Lagre"; return; }
+        patch.image_path = newImg;
+      } else if (st.removed && cur.imagePath) patch.image_path = "";
+      if (!Object.keys(patch).length) { close(); if (auto) toast(IDLE); return; }
+      const oldImg = cur.imagePath;
+      saveBtn.disabled = true;
+      const ok = await write(() => S.sb.from("wishes").update(patch).eq("id", w.id), err);
+      saveBtn.disabled = false; saveBtn.textContent = "Lagre";
+      if (ok) {
+        if ("image_path" in patch && oldImg) dropImages([oldImg]);
+        if (newImg) urlCache.delete(newImg);
+        close(); if (auto) toast(IDLE + " Endringene dine er lagret.");
+      } else { if (newImg) dropImages([newImg]); if (auto) { close(); toast(IDLE + " Endringene kunne ikke lagres."); } }
+    };
+    [t, l, qn, pr, who].forEach(inp => inp.addEventListener("keydown", e => {
+      if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); save(); } else if (e.key === "Escape") { cancel(); }
+    }));
+    const tickEl = h("span", { text: "Du redigerer · lukkes etter 7 min uten aktivitet" });
+    const headEl = h("div", { class: "edithead" }, avatar(S.uid), tickEl);
+    if (editSess && editSess.wid === w.id) { editSess.save = save; editSess.tickEl = tickEl; editSess.headEl = headEl; }
+    const form = h("form", { class: "edit", novalidate: true, onsubmit: e => { e.preventDefault(); save(); } },
+      headEl, field("Ønske", t), field("Lenke (valgfri)", l), h("div", { class: "qp" }, field("Antall", qn), prField), pic.el, field("Ønske til", who),
+      h("div", { class: "btns" }, saveBtn, h("button", { class: "btn", type: "button", onclick: cancel }, "Avbryt")), err);
+    ["input", "keydown", "pointerdown", "change", "focusin"].forEach(ev => form.addEventListener(ev, markActive));
+    el.replaceChildren(form);
+    setTimeout(() => t.focus(), 0);
+  }
+
+  function renderCards(people) {
+    if (S.ui.editingWish && !S.wishes.has(S.ui.editingWish)) { stopEditSession(); S.ui.editingWish = null; }
     if (people.length === 0) {
       els.state.hidden = false;
-      els.state.textContent = "Ingen personer på listen ennå. Trykk «Legg til person» for å lage det første kortet.";
+      els.state.textContent = "Ingen personer på listen ennå. Trykk «Legg til person» for å begynne.";
     } else els.state.hidden = true;
 
-    const cardNodes = [];
+    const nodes = [];
     for (const p of people) {
-      let card = cards.get(p.id);
-      if (!card) { card = makeCard(p.id); cards.set(p.id, card); }
-      const list = wishesFor(p.id);
-      card.root.hidden = S.filter !== "all" && S.filter !== p.id;
-      renderHead(card, p, list);
-
-      const rowNodes = [];
-      for (const w of list) {
-        let row = rows.get(w.id);
-        if (!row) { row = { el: h("li", { class: "wish" }), sig: null }; rows.set(w.id, row); }
-        renderRow(row, w);
-        rowNodes.push(row.el);
-      }
-      placeChildren(card.list, rowNodes);
-      card.list.hidden = list.length === 0;
-      card.empty.hidden = list.length > 0;
-      card.empty.textContent = `Ingen ønsker for ${p.name || "denne personen"} ennå. Legg til det første nedenfor.`;
-      cardNodes.push(card.root);
+      let c = cardEls.get(p.id);
+      if (!c) { c = makeCard(p.id); cardEls.set(p.id, c); }
+      const ws = wishesOf(p.id);
+      const name = p.name || "Uten navn";
+      renderHead(c, p, ws);
+      const n = ws.length, b = ws.filter(isDone).length;
+      if (S.hide) c.summary.textContent = n === 1 ? "1 ønske" : n + " ønsker";
+      else c.summary.replaceChildren(h("b", { text: b + " av " + n }), " kjøpt");
+      placeChildren(c.list, ws.map(w => renderRow(w)));
+      c.list.hidden = !n;
+      c.empty.hidden = !!n;
+      c.empty.textContent = "Ingen ønsker for " + name + " ennå. Trykk «Nytt ønske» for å legge til det første.";
+      if (c.form.hidden) c.bar.hidden = false;
+      c.root.hidden = S.filter !== "all" && S.filter !== p.id;
+      nodes.push(c.root);
     }
-    placeChildren(els.cards, cardNodes);
-    for (const [pid] of cards) if (!S.people.has(pid)) cards.delete(pid);
-    for (const [wid] of rows) if (!S.wishes.has(wid)) rows.delete(wid);
+    placeChildren(els.cards, nodes);
+    for (const [pid] of cardEls) if (!S.people.has(pid)) cardEls.delete(pid);
+    for (const [wid] of rowEls) if (!S.wishes.has(wid)) rowEls.delete(wid);
+  }
+
+  // ---------- theme ----------
+  const mq = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
+  function currentTheme() { return document.documentElement.dataset.theme || (mq && mq.matches ? "dark" : "light"); }
+  function paintTheme() { const t = currentTheme(); document.querySelectorAll(".theme button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.t === t))); }
+  document.querySelectorAll(".theme button").forEach(b => b.addEventListener("click", () => {
+    document.documentElement.dataset.theme = b.dataset.t; lsSet(LS.theme, b.dataset.t); paintTheme();
+  }));
+  if (mq && mq.addEventListener) mq.addEventListener("change", paintTheme);
+  paintTheme();
+
+  // ---------- drag chips to reorder cards ----------
+  // Mouse: press and drag. Touch: hold about 0.4 s, then drag. The floating
+  // copy is removed on every way a gesture can end, including phones that
+  // never send pointerup after a long press.
+  let drag = null, suppressClick = false;
+  function clearGhosts() { document.querySelectorAll(".chip.ghost").forEach(g => g.remove()); document.body.classList.remove("chip-dragging"); }
+  function moveGhost(x, y) { drag.ghost.style.transform = "translate(" + (x - drag.offX) + "px," + (y - drag.offY) + "px) scale(1.06)"; }
+  function startDrag(x, y) {
+    if (!drag || drag.active) return;
+    drag.active = true; S.dragging = true;
+    const r = drag.chip.getBoundingClientRect();
+    drag.offX = x - r.left; drag.offY = y - r.top;
+    clearGhosts();
+    const g = drag.chip.cloneNode(true); g.classList.add("ghost"); g.removeAttribute("data-pid"); g.style.width = r.width + "px";
+    g.setAttribute("aria-hidden", "true");
+    document.body.appendChild(g); drag.ghost = g; moveGhost(x, y);
+    drag.chip.classList.add("dragging"); document.body.classList.add("chip-dragging");
+    try { drag.chip.setPointerCapture(drag.pointerId); } catch {}
+    try { if (navigator.vibrate) navigator.vibrate(15); } catch {}
+  }
+  els.filters.addEventListener("pointerdown", e => {
+    if (drag) endDrag(drag.active);
+    clearGhosts();
+    const chip = e.target.closest(".chip[data-pid]");
+    if (!chip || !S.sb || (e.pointerType === "mouse" && e.button !== 0)) return;
+    drag = { id: chip.dataset.pid, chip, pointerId: e.pointerId, sx: e.clientX, sy: e.clientY, active: false, touch: e.pointerType !== "mouse" };
+    if (drag.touch) { const x = e.clientX, y = e.clientY; drag.timer = setTimeout(() => startDrag(x, y), 400); }
+  });
+  els.filters.addEventListener("contextmenu", e => { if (e.target.closest(".chip[data-pid]")) e.preventDefault(); });
+  document.addEventListener("pointermove", e => {
+    if (!drag || e.pointerId !== drag.pointerId) return;
+    const dist = Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy);
+    if (!drag.active) {
+      if (drag.touch) { if (dist > 10) { clearTimeout(drag.timer); drag = null; } return; }
+      if (dist < 6) return;
+      startDrag(e.clientX, e.clientY);
+    }
+    e.preventDefault();
+    moveGhost(e.clientX, e.clientY);
+    drag.ghost.style.display = "none";
+    const under = document.elementFromPoint(e.clientX, e.clientY);
+    drag.ghost.style.display = "";
+    const over = under && under.closest(".chip[data-pid]");
+    if (over && over !== drag.chip && over.parentNode === drag.chip.parentNode) {
+      const r = over.getBoundingClientRect();
+      const after = e.clientX > r.left + r.width / 2;
+      const ref = after ? over.nextSibling : over;
+      if (ref !== drag.chip) over.parentNode.insertBefore(drag.chip, ref);
+    }
+  }, { passive: false });
+  document.addEventListener("touchmove", e => { if (drag && drag.active) e.preventDefault(); }, { passive: false });
+  function endDrag(commit) {
+    if (!drag) return;
+    clearTimeout(drag.timer);
+    const d = drag; drag = null;
+    if (!d.active) return;
+    suppressClick = true; setTimeout(() => { suppressClick = false; }, 80);
+    if (d.ghost) d.ghost.remove();
+    clearGhosts(); d.chip.classList.remove("dragging");
+    S.dragging = false;
+    const ids = [...els.filters.querySelectorAll(".chip[data-pid]")].map(c => c.dataset.pid);
+    els.filters.dataset.sig = "";
+    if (commit) saveOrder(ids); else render();
+  }
+  document.addEventListener("pointerup", e => { if (drag && e.pointerId === drag.pointerId) endDrag(true); });
+  document.addEventListener("pointercancel", e => { if (drag && e.pointerId === drag.pointerId) endDrag(false); });
+  document.addEventListener("touchend", e => { if (drag && !e.touches.length) endDrag(drag.active); });
+  document.addEventListener("touchcancel", () => { if (drag) endDrag(false); });
+  document.addEventListener("lostpointercapture", e => { if (drag && drag.active && e.pointerId === drag.pointerId) setTimeout(() => { if (drag && drag.active) endDrag(true); }, 0); });
+  window.addEventListener("blur", () => { if (drag) endDrag(false); });
+  document.addEventListener("visibilitychange", () => { if (document.hidden && drag) endDrag(false); });
+  // Saves the new order as sort_order 1..n for everyone in the group.
+  async function saveOrder(ids) {
+    const changes = ids.map((id, i) => ({ id, order: i + 1 })).filter(x => S.people.has(x.id) && S.people.get(x.id).order !== x.order);
+    if (!changes.length) { render(); return; }
+    S.orderOverride = ids;
+    for (const c of changes) S.people.get(c.id).order = c.order;
+    render();
+    const results = await Promise.all(changes.map(c => write(() => S.sb.from("people").update({ sort_order: c.order }).eq("id", c.id))));
+    S.orderOverride = null;
+    if (results.some(x => !x)) scheduleRefetch(0);
+    render();
   }
 
   // ---------- loading data ----------
@@ -864,7 +1371,9 @@
         sb.from("groups").select("id,name,owner_id,invite_token,created_at").order("created_at"),
         sb.from("group_members").select("user_id,joined_at,profile:profiles(display_name)").eq("group_id", gid).order("joined_at"),
         sb.from("people").select("id,name,sort_order,created_at").eq("group_id", gid),
-        sb.from("wishes").select("id,person_id,title,link,price,note,bought,bought_by,bought_at,created_at").eq("group_id", gid),
+        sb.from("wishes").select("id,person_id,title,link,price,note,quantity,image_path,bought,bought_by,bought_at,created_at").eq("group_id", gid),
+        sb.from("wish_purchases").select("wish_id,user_id,n,at").eq("group_id", gid),
+        sb.from("wish_locks").select("wish_id,locked_by,tab,started_at,expires_at").eq("group_id", gid),
       ]);
     } catch (e) { res = [{ error: e, status: 0 }]; }
     if (gen !== fetchGen) return;
@@ -875,14 +1384,14 @@
       retryTimer = setTimeout(() => scheduleRefetch(0), 5000 + Math.random() * 3000);
       return;
     }
-    const [g, m, p, w] = res;
+    const [g, m, p, w, pu, lk] = res;
     S.loadSlow = false;
     const oldName = currentGroup()?.name || "gruppen";
     S.groups = g.data.map(readGroup);
     if (!S.groups.some(x => x.id === gid)) {
       // Removed from the group (or it was deleted) while we were looking at it.
-      const name = oldName;
-      S.banner = { kind: "error", text: `Du er ikke lenger med i «${name}».` };
+      stopEditSession(true);
+      S.banner = { kind: "error", text: `Du er ikke lenger med i «${oldName}».` };
       if (lsGet(LS.group) === gid) lsDel(LS.group);
       S.ui = freshUi();
       if (S.groups.length) chooseGroup(S.groups[0].id);
@@ -897,6 +1406,17 @@
     for (const r of p.data) S.people.set(r.id, readPerson(r));
     S.wishes.clear();
     for (const r of w.data) S.wishes.set(r.id, readWish(r));
+    S.purchases.clear();
+    for (const r of pu.data) {
+      const n = Math.floor(Number(r.n));
+      if (!(n >= 1)) continue;
+      if (!S.purchases.has(r.wish_id)) S.purchases.set(r.wish_id, []);
+      S.purchases.get(r.wish_id).push({ userId: r.user_id, n, at: toMs(r.at) });
+    }
+    S.locks.clear();
+    for (const r of lk.data) S.locks.set(r.wish_id, { by: r.locked_by, tab: str(r.tab, 64), startedAt: toMs(r.started_at), expiresAt: toMs(r.expires_at) ?? 0 });
+    // Someone else holds the lock for what I am editing (my lock expired).
+    if (editSess && editSess.ok) { const l = lockedByOther(editSess.wid); if (l) lostLock(editSess, l.by); }
     S.loaded = true;
     render();
   }
@@ -909,7 +1429,7 @@
     if (!S.gid) return;
     const filter = "group_id=eq." + S.gid;
     const ch = S.sb.channel("gruppe-" + S.gid);
-    for (const table of ["people", "wishes", "group_members"]) {
+    for (const table of ["people", "wishes", "group_members", "wish_purchases", "wish_locks"]) {
       ch.on("postgres_changes", { event: "*", schema: "public", table, filter }, () => scheduleRefetch());
     }
     channel = ch;
@@ -928,15 +1448,16 @@
     fetchGen++;
     clearTimeout(retryTimer);
     const changed = gid !== S.gid;
+    if (changed) stopEditSession();
     S.gid = gid || null;
     if (S.gid) lsSet(LS.group, S.gid);
     if (changed) {
       const panelOpen = S.ui.panelOpen;
       S.ui = freshUi();
       S.ui.panelOpen = panelOpen;
-      S.people.clear(); S.wishes.clear(); S.members = []; S.names = {}; S.loaded = false;
-      cards.clear(); rows.clear(); els.cards.replaceChildren();
-      els.addPerson.hidden = true; els.newPersonName.value = ""; els.personErr.textContent = "";
+      S.people.clear(); S.wishes.clear(); S.purchases.clear(); S.locks.clear(); S.members = []; S.names = {}; S.loaded = false;
+      cardEls.clear(); rowEls.clear(); els.cards.replaceChildren(); els.filters.dataset.sig = "";
+      els.addPersonForm.hidden = true; els.newPersonName.value = ""; els.addPersonErr.textContent = "";
       els.copyStatus.textContent = "";
       resubscribe();
     }
@@ -947,18 +1468,21 @@
   // ---------- session lifecycle ----------
   function resetSession() {
     fetchGen++;
+    stopEditSession(true);
     clearTimeout(refetchTimer); clearTimeout(retryTimer);
     if (channel) { const old = channel; channel = null; S.sb.removeChannel(old); }
     S.uid = null; S.myName = ""; S.groups = []; S.gid = null; S.members = [];
-    S.people.clear(); S.wishes.clear(); S.names = {}; S.loaded = false;
+    S.people.clear(); S.wishes.clear(); S.purchases.clear(); S.locks.clear(); S.names = {}; S.loaded = false;
     S.ui = freshUi(); S.loadSlow = false; S.rtDown = false; S.fatal = null;
-    cards.clear(); rows.clear(); els.cards.replaceChildren();
+    cardEls.clear(); rowEls.clear(); els.cards.replaceChildren(); els.filters.dataset.sig = "";
+    urlCache.clear();
     if (S.banner && S.banner.kind !== "error") S.banner = null;
   }
 
   async function handleSession(session) {
     const user = session && session.user;
     const uid = user ? user.id : null;
+    S.token = session && session.access_token || null;
     if (uid && uid === S.uid) return; // token refresh or duplicate event
     if (!uid && S.view === "auth") return;
     resetSession();
@@ -1034,6 +1558,7 @@
   window.addEventListener("offline", () => { S.offline = true; renderBanner(); });
   window.addEventListener("online", () => { S.offline = false; renderBanner(); scheduleRefetch(0); });
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") scheduleRefetch(0); });
+  // Refresh relative times ("i dag"/"i går") and signed image URLs once a minute.
   setInterval(() => { if (S.view === "list" && S.loaded) render(); }, 60000);
 
   // ---------- start ----------
@@ -1051,6 +1576,7 @@
       S.fatal = "Kunne ikke laste appen. Sjekk nettforbindelsen og last siden inn på nytt.";
       render(); return;
     }
+    S.url = url; S.key = key;
     S.sb = window.supabase.createClient(url, key, {
       auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
     });

@@ -3,262 +3,249 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src https://*.supabase.co wss://*.supabase.co; base-uri 'none'; form-action 'self'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https://*.supabase.co; connect-src https://*.supabase.co wss://*.supabase.co; base-uri 'none'; form-action 'self'; object-src 'none'">
 <meta name="referrer" content="no-referrer">
 <title>Gavelisten</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="theme.js"></script>
 <style>
-:root{
-  color-scheme: light;
-  --bg:#FFFFFF;
-  --surface:#F4F7F5;
-  --surface-2:#E9F0EC;
-  --ink:#16251E;
-  --muted:#5D6B64;
-  --line:#D6E0DA;
-  --green:#1D5A42;
-  --green-hover:#164A36;
-  --on-green:#FFFFFF;
-  --green-text:#1D5A42;
-  --red:#A6213A;
-  --red-soft:#F8E6E9;
-  --warn-bg:#FFF4E0;
-  --warn-ink:#6B4500;
-  --focus:#A6213A;
-  box-sizing:border-box;
-  padding-top:env(safe-area-inset-top,0px);
-  padding-bottom:env(safe-area-inset-bottom,0px);
+:root{color-scheme:light;
+  /* Palette: #A2E595 light green, #88A784 sage, #264B1B spruce, #12300E deep spruce, accent #EF473A red, #F7C5C5 pink */
+  --bg:#f7faf5; --surface:#ffffff; --surface-2:#eef7ea; --text:#12300e; --muted:#5d6d5a;
+  --line:#dde6d9; --green:#264b1b; --green-soft:#e2f4dc; --green-text:#a2e595;
+  --card-stroke:#88a784; --red:#ef473a; --red-text:#bf2f24; --red-soft:#fde6e6; --pink:#f7c5c5;
+  --chip-on-text:#a2e595;
+  --focus:#264b1b; --shadow:0 1px 2px rgba(18,48,14,.06),0 4px 16px rgba(18,48,14,.05);
+}
+:root[data-theme=dark]{color-scheme:dark;
+    --bg:#0d240b; --surface:#12300e; --surface-2:#183b13; --text:#eef6ea; --muted:#9db99a;
+    --line:#264b1b; --green:#a2e595; --green-soft:#264b1b; --green-text:#12300e;
+    --card-stroke:#88a784; --red:#ef473a; --red-text:#f7a59d; --red-soft:#3f2324; --pink:#f7c5c5;
+    --chip-on-text:#12300e;
+    --focus:#a2e595; --shadow:0 1px 2px rgba(0,0,0,.3);
 }
 @media (prefers-color-scheme: dark){
-  :root:not([data-theme="light"]){
-    color-scheme: dark;
-    --bg:#0D1612;
-    --surface:#15221C;
-    --surface-2:#1C2D25;
-    --ink:#E6EEE9;
-    --muted:#9CABA3;
-    --line:#2A3D34;
-    --green:#2E7556;
-    --green-hover:#378965;
-    --on-green:#FFFFFF;
-    --green-text:#7CC9A2;
-    --red:#E3607A;
-    --red-soft:#3A1A21;
-    --warn-bg:#3A2C10;
-    --warn-ink:#F3D49A;
-    --focus:#E3607A;
+  :root:not([data-theme=light]){color-scheme:dark;
+    --bg:#0d240b; --surface:#12300e; --surface-2:#183b13; --text:#eef6ea; --muted:#9db99a;
+    --line:#264b1b; --green:#a2e595; --green-soft:#264b1b; --green-text:#12300e;
+    --card-stroke:#88a784; --red:#ef473a; --red-text:#f7a59d; --red-soft:#3f2324; --pink:#f7c5c5;
+    --chip-on-text:#12300e;
+    --focus:#a2e595; --shadow:0 1px 2px rgba(0,0,0,.3);
   }
 }
-:root[data-theme="dark"]{
-  color-scheme: dark;
-  --bg:#0D1612;
-  --surface:#15221C;
-  --surface-2:#1C2D25;
-  --ink:#E6EEE9;
-  --muted:#9CABA3;
-  --line:#2A3D34;
-  --green:#2E7556;
-  --green-hover:#378965;
-  --on-green:#FFFFFF;
-  --green-text:#7CC9A2;
-  --red:#E3607A;
-  --red-soft:#3A1A21;
-  --warn-bg:#3A2C10;
-  --warn-ink:#F3D49A;
-  --focus:#E3607A;
-}
-html{scroll-padding-top:env(safe-area-inset-top,0px)}
-*,*::before,*::after{box-sizing:inherit}
-body{
-  margin:0;background:var(--bg);color:var(--ink);
-  font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-  font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased;
-}
-h1,h2,.display{font-family:"Bricolage Grotesque",Inter,system-ui,sans-serif}
-main{max-width:760px;margin:0 auto;padding:28px 18px 64px}
-button,input{font:inherit;color:inherit}
-:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:6px}
-.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
-
-/* Header */
-.top{display:flex;align-items:flex-start;gap:14px;margin-bottom:6px}
-.sprig{flex:none;font-size:46px;line-height:1;margin-top:2px}
-h1{font-size:clamp(2rem,7vw,2.9rem);line-height:1.02;font-weight:800;letter-spacing:-.02em;margin:0;color:var(--green-text)}
-.summary{margin:6px 0 0;color:var(--muted)}
-
-.toolbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;margin:22px 0 14px}
-.switch{display:inline-flex;align-items:center;gap:10px;cursor:pointer;background:none;border:0;padding:4px 0;text-align:left}
-.switch .track{width:40px;height:24px;border-radius:12px;background:var(--line);position:relative;flex:none;transition:background .15s}
-.switch .track::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:var(--bg);box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s}
-.switch[aria-checked="true"] .track{background:var(--green)}
-.switch[aria-checked="true"] .track::after{transform:translateX(16px)}
-.switch .lbl{font-size:.95rem}
-
-.btn{border:0;border-radius:10px;padding:9px 16px;font-weight:600;cursor:pointer;background:var(--green);color:var(--on-green)}
-.btn:hover{background:var(--green-hover)}
-.btn:disabled{opacity:.5;cursor:default}
-.btn.ghost{background:transparent;color:var(--green-text);padding:6px 10px}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text)}
+body{font-family:Inter,system-ui,sans-serif;font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:28px 16px 80px}
+h1,h2{font-family:"Bricolage Grotesque",Inter,sans-serif;letter-spacing:-.01em;margin:0}
+h1{font-size:clamp(28px,6vw,40px);font-weight:700;color:var(--green);display:flex;align-items:center;gap:12px;line-height:1.05}
+h1 .ttl{display:flex;flex-direction:column;align-items:flex-start}
+h1 .star{font-size:1.7em;line-height:1;flex:none}
+h1 .year{color:var(--red);font-size:.5em;font-weight:600;letter-spacing:.06em;margin-top:4px}
+.top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.theme{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:3px;background:var(--surface);gap:2px;flex:none}
+.theme button{border:0;background:transparent;width:34px;height:28px;border-radius:999px;display:grid;place-items:center;color:var(--muted);padding:0}
+.theme button:hover{color:var(--text)}
+.theme button[aria-pressed=true]{background:var(--green);color:var(--green-text)}
+.theme svg{width:16px;height:16px}
+.lead{color:var(--muted);margin:6px 0 20px}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:7px 12px;font-size:14px;font-weight:500;line-height:1.2}
+.btn:hover{background:var(--surface-2)}
+.btn.primary{background:var(--green);border-color:var(--green);color:var(--green-text)}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.danger{background:var(--red);border-color:var(--red);color:#fff}
+.confirm{border:1px solid var(--pink)}
+.btn.ghost{border-color:transparent;background:transparent;padding:6px 8px}
 .btn.ghost:hover{background:var(--surface-2)}
-.btn.danger{background:var(--red);color:#fff}
-.btn.small{padding:6px 12px;font-size:.9rem}
-.add-btn{display:inline-flex;align-items:center;gap:6px;margin:0 0 14px}
-.add-btn svg{width:14px;height:14px;flex:none}
-.add-btn[hidden]{display:none}
-.linkbtn{background:none;border:0;padding:4px 6px;border-radius:6px;cursor:pointer;color:var(--muted);font-size:.88rem}
-.linkbtn:hover{color:var(--ink);background:var(--surface-2)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.icon-btn{border:0;background:transparent;border-radius:8px;width:32px;height:32px;display:inline-grid;place-items:center;font-size:15px;color:var(--muted)}
+.icon-btn:hover{background:var(--surface-2);color:var(--text)}
+input[type=text],input[type=url],input[type=email]{width:100%;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:9px 11px;font-size:15px}
+input::placeholder{color:var(--muted);opacity:.85}
 
-.pills{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 22px}
-.pill{border:1px solid var(--line);background:transparent;border-radius:999px;padding:6px 14px;cursor:pointer;font-size:.92rem}
-.pill .n{color:var(--muted);margin-left:4px}
-.pill[aria-pressed="true"]{background:var(--green);border-color:var(--green);color:var(--on-green)}
-.pill[aria-pressed="true"] .n{color:var(--on-green);opacity:.85}
-
-.banner{border-radius:10px;padding:10px 14px;margin:0 0 16px;background:var(--warn-bg);color:var(--warn-ink);font-size:.95rem;display:flex;gap:10px;align-items:flex-start;justify-content:space-between}
+.banner{border-radius:12px;padding:10px 14px;margin:0 0 14px;font-size:14px;display:flex;gap:10px;align-items:center;justify-content:space-between}
+.banner.err{background:var(--red-soft);color:var(--red-text);border:1px solid color-mix(in srgb,var(--red) 30%,transparent)}
+.banner.info{background:var(--green-soft);color:var(--text);border:1px solid var(--line)}
 .banner[hidden]{display:none}
-.banner.error{background:var(--red-soft);color:var(--red)}
-.banner button{flex:none}
 
-.add-person{background:var(--surface);border-radius:14px;padding:14px;margin:0 0 18px;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.toolbar{display:flex;flex-direction:column;gap:12px;margin-bottom:18px}
+.filters{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 12px;font-size:14px;font-weight:500}
+.chip .n{color:var(--muted);font-weight:400;margin-left:4px}
+.chip[data-pid]{cursor:grab;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.chip.dragging{opacity:.35}
+.chip.ghost{position:fixed;left:0;top:0;z-index:60;pointer-events:none;box-shadow:0 8px 24px rgba(0,0,0,.25);margin:0}
+body.chip-dragging,body.chip-dragging *{cursor:grabbing!important;user-select:none;-webkit-user-select:none}
+.chip[aria-pressed=true]{background:var(--green);border-color:var(--green);color:var(--chip-on-text)}
+.chip[aria-pressed=true] .n{color:inherit;opacity:.8}
+.row-between{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.switch{display:inline-flex;align-items:center;gap:10px;font-size:14px;cursor:pointer;user-select:none}
+.switch input{position:absolute;opacity:0;width:1px;height:1px}
+.switch .track{width:40px;height:23px;border-radius:999px;background:var(--line);position:relative;transition:background .15s;flex:none}
+.switch .track::after{content:"";position:absolute;top:3px;left:3px;width:17px;height:17px;border-radius:50%;background:#fff;transition:transform .15s;box-shadow:0 1px 2px rgba(0,0,0,.25)}
+.switch input:checked + .track{background:var(--green)}
+.switch input:checked + .track::after{transform:translateX(17px)}
+.switch input:focus-visible + .track{outline:2px solid var(--focus);outline-offset:2px}
+
+.add-person{display:flex;gap:8px;margin-top:4px}
 .add-person[hidden]{display:none}
-.add-person input{flex:1 1 220px}
 
-input[type=text],input[type=url]{
-  border:1px solid var(--line);background:var(--bg);border-radius:9px;padding:9px 11px;min-width:0;width:100%;
-}
-input[type=text]:focus,input[type=url]:focus{outline:2px solid var(--green);outline-offset:-1px;border-color:transparent}
+.card{background:var(--surface);border:2px solid var(--card-stroke);border-radius:16px;box-shadow:var(--shadow);margin-bottom:16px;overflow:hidden}
+.card-head{padding:14px 16px 10px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.card-head h2{font-size:22px;font-weight:700;flex:1;min-width:0;overflow-wrap:anywhere}
+.card-head .actions{display:flex;gap:2px}
+.card-head .rename{display:flex;gap:8px;flex:1;min-width:220px}
+.card-head .confirm{flex-basis:100%}
+.summary{font-size:13px;color:var(--muted);padding:0 16px;margin-top:8px}
+.summary b{color:var(--red-text);background:var(--red-soft);border:1px solid var(--pink);border-radius:999px;padding:0 8px;font-weight:600;margin-right:2px}
+.confirm{background:var(--red-soft);border-radius:10px;padding:8px 10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:14px}
+.confirm span{flex:1;min-width:160px}
 
-/* Cards */
-#cards{display:flex;flex-direction:column;gap:20px}
-.card{background:var(--surface);border-radius:16px;padding:18px 18px 16px}
-.card[hidden]{display:none}
-.head{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px}
-.head h2{font-size:1.5rem;font-weight:700;margin:0;letter-spacing:-.01em;overflow-wrap:anywhere}
-.head .count{color:var(--muted);font-size:.95rem}
-.head .card-actions{margin-left:auto;display:flex;gap:2px}
-.head.editing{display:block}
-.rename-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-.rename-row input{flex:1 1 200px}
-.confirm-box{background:var(--red-soft);color:var(--ink);border-radius:10px;padding:10px 12px;display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
-.confirm-box p{margin:0;flex:1 1 220px}
-.confirm-box .btns{display:flex;gap:8px}
-.bar{height:4px;border-radius:2px;background:var(--line);margin:10px 0 4px;overflow:hidden}
-.bar span{display:block;height:100%;background:var(--green);border-radius:2px;transition:width .3s}
-.bar[hidden]{display:none}
-
-ul.wishes{list-style:none;margin:10px 0 0;padding:0}
-.wish{display:flex;gap:12px;align-items:flex-start;padding:12px 0;border-top:1px solid var(--line)}
-.wish:first-child{border-top:0}
-.check{display:flex;flex-direction:column;align-items:center;gap:2px;flex:none;cursor:pointer;padding-top:2px}
-.check input{position:absolute;opacity:0;width:22px;height:22px;margin:0;cursor:pointer}
-.check .box{width:22px;height:22px;border:2px solid var(--green-text);border-radius:6px;display:grid;place-items:center;background:var(--bg)}
-.check .box svg{width:14px;height:14px;opacity:0}
-.check input:checked + .box{background:var(--green);border-color:var(--green)}
-.check input:checked + .box svg{opacity:1}
-.check input:focus-visible + .box{outline:2px solid var(--focus);outline-offset:2px}
-.check input:disabled + .box{opacity:.45}
-.check .cap{font-size:.7rem;color:var(--muted)}
-.check.locked{cursor:default}
-.check{position:relative}
-.wbody{flex:1;min-width:0}
-.wtitle{font-weight:500;overflow-wrap:anywhere}
-.wish.bought .wtitle{text-decoration:line-through;text-decoration-color:var(--muted);color:var(--muted)}
-.meta{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:.88rem;margin-top:2px;color:var(--muted)}
-.meta a{color:var(--green-text);text-decoration:none;font-weight:500}
+.list{list-style:none;margin:0;padding:6px 8px}
+.wish{display:flex;gap:12px;padding:10px 8px;border-radius:10px;align-items:flex-start}
+.wish + .wish{border-top:1px solid var(--line);border-radius:0}
+.wish .chk{flex:none;padding-top:2px}
+.wish input[type=checkbox]{appearance:none;-webkit-appearance:none;width:22px;height:22px;margin:0;border:2px solid var(--green);border-radius:6px;background:transparent;display:grid;place-items:center;cursor:pointer;transition:background .12s}
+.wish input[type=checkbox]::after{content:"";width:6px;height:11px;border:solid var(--green-text);border-width:0 2.5px 2.5px 0;transform:translateY(-1px) rotate(45deg);opacity:0}
+.wish input[type=checkbox]:checked{background:var(--green)}
+.wish input[type=checkbox]:checked::after{opacity:1}
+.wish input[type=checkbox]:hover:not(:disabled){background:var(--green-soft)}
+.wish input[type=checkbox]:checked:hover:not(:disabled){background:var(--green)}
+.wish input[type=checkbox]:disabled{cursor:not-allowed;border-color:var(--muted);border-style:dashed}
+.wish input[type=checkbox]:disabled:checked{background:var(--muted);border-style:solid}
+.wish .body{flex:1;min-width:0}
+.wish .title{font-weight:500;overflow-wrap:anywhere}
+.avatar{flex:none;display:inline-grid;place-items:center;width:26px;height:26px;border-radius:50%;font-size:11px;font-weight:700;letter-spacing:.02em;line-height:1;box-shadow:0 0 0 2px var(--surface)}
+.editing{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);margin-bottom:4px}
+.editing .dots::after{content:"";animation:dots 1.4s steps(4,end) infinite}
+@keyframes dots{0%{content:""}25%{content:"."}50%{content:".."}75%{content:"..."}}
+.wish.locked{background:color-mix(in srgb,var(--surface-2) 70%,transparent);box-shadow:inset 3px 0 0 var(--card-stroke)}
+.wish.locked .body{cursor:not-allowed}
+.wish.locked .tools .icon-btn{opacity:.35;cursor:not-allowed}
+.edithead{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.edithead.warn{color:var(--red-text);font-weight:600}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);opacity:0;background:var(--text);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:14px;max-width:min(92vw,520px);box-shadow:0 8px 24px rgba(0,0,0,.25);transition:opacity .2s,transform .2s;z-index:70;pointer-events:none;text-align:center}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.moreinfo{font-weight:400;font-style:italic;color:var(--muted);font-size:.92em}
+.qtychip{display:inline-block;margin-left:6px;font-size:12px;font-weight:600;color:var(--green);background:var(--green-soft);border-radius:999px;padding:1px 8px;vertical-align:1px;text-decoration:none}
+.count{width:30px;height:30px;border-radius:9px;border:2px solid var(--green);display:grid;place-items:center;font-size:11px;font-weight:700;color:var(--green);letter-spacing:-.02em;margin-top:-4px;font-variant-numeric:tabular-nums}
+.count.done{background:var(--green);color:var(--green-text)}
+.count.locked{border-color:var(--muted);border-style:dashed;color:var(--muted);background:transparent}
+.stepper{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px;font-size:13px;color:var(--muted)}
+.stepper .ctl{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface)}
+.stepper .ctl button{border:0;background:transparent;width:32px;height:30px;font-size:17px;line-height:1;color:var(--green);font-weight:600}
+.stepper .ctl button:hover:not(:disabled){background:var(--surface-2)}
+.stepper .ctl button:disabled{color:var(--line);cursor:not-allowed}
+.stepper .ctl output{min-width:26px;text-align:center;font-weight:600;color:var(--text);font-variant-numeric:tabular-nums}
+.stepper .left{font-weight:500}
+.qp{display:grid;grid-template-columns:96px 1fr;gap:8px}
+.field input[type=number]{width:100%;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:9px 11px;font-size:15px}
+.wish.bought .title{text-decoration:line-through;text-decoration-color:var(--muted);color:var(--muted)}
+.meta{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:14px;margin-top:2px}
+.meta a{color:var(--green);text-decoration:none;font-weight:500}
 .meta a:hover{text-decoration:underline}
-.note{margin:3px 0 0;font-size:.88rem;color:var(--muted);font-style:italic;overflow-wrap:anywhere}
-.boughtby{margin:4px 0 0;font-size:.86rem;color:var(--red);font-weight:500}
-.wactions{display:flex;gap:2px;flex:none}
-.wish .confirm-box{margin-top:8px}
-.wedit{display:grid;gap:8px;flex:1}
-.wedit .two{display:grid;grid-template-columns:2fr 1fr;gap:8px}
-.wedit .btns{display:flex;gap:8px}
+.price{color:var(--muted)}
+.note{font-size:13px;color:var(--muted);font-style:italic;margin-top:2px}
+.boughtby{font-size:13px;color:var(--red-text);margin-top:3px;font-weight:500}
+.wish .tools{display:flex;flex:none}
+.wish .confirm{margin-top:8px}
+.edit{display:grid;gap:8px;width:100%}
+.edit .btns{display:flex;gap:8px}
+.edit .who{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--muted)}
+.edit select{flex:1;border:1px solid var(--line);background:var(--surface);color:var(--text);border-radius:10px;padding:8px 10px;font:inherit;font-size:15px}
+.field{display:grid;gap:4px;min-width:0}
+.field .lbl{font-size:13px;font-weight:600;color:var(--muted)}
+.field .hint{font-size:12.5px;color:var(--muted);margin-top:-2px}
+.sr{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.pick{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.pick-prev{width:56px;height:56px;object-fit:cover;border-radius:10px;border:1px solid var(--line);background:var(--surface)}
+.pick-prev[hidden],.thumb[hidden]{display:none}
+.thumb{flex:none;width:52px;height:52px;padding:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface-2);cursor:zoom-in}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.wish .body.clickable{cursor:pointer}
+.wish:has(.body.clickable:hover){background:var(--surface-2)}
+.card-head h2.clickable{cursor:pointer}
+.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.82);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:50;padding:24px;cursor:zoom-out}
+.lightbox[hidden]{display:none}
+.lightbox img{max-width:100%;max-height:82vh;border-radius:12px;box-shadow:0 10px 40px rgba(0,0,0,.5);background:#fff}
+.lightbox .cap{color:#fff;margin-top:12px;text-align:center;font-size:15px;max-width:600px}
+.lightbox .x{position:absolute;top:14px;right:14px;width:40px;height:40px;border-radius:50%;border:0;background:rgba(255,255,255,.18);color:#fff;font-size:22px;line-height:1}
+.empty{color:var(--muted);font-size:14px;padding:14px 10px}
 
-.empty{margin:12px 0 4px;color:var(--muted)}
-.empty[hidden]{display:none}
-
-.addwish{margin-top:14px;padding-top:14px;border-top:1px dashed var(--line);display:grid;gap:8px}
-.addwish[hidden]{display:none}
-.addwish .two{display:grid;grid-template-columns:2fr 1fr;gap:8px}
-.addwish .go{justify-self:start}
-.err{color:var(--red);font-size:.88rem;margin:0}
-.err:empty{display:none}
-
-.state{color:var(--muted);text-align:center;padding:40px 0}
-.state[hidden]{display:none}
-
+.addform{padding:12px 16px 16px;border-top:1px solid var(--line);background:var(--surface-2);display:grid;gap:8px}
+.addform[hidden],.addbar[hidden]{display:none}
+.addbar{padding:10px 16px 14px;border-top:1px solid var(--line)}
+.add-open{width:100%;border-style:dashed;border-color:var(--card-stroke);color:var(--green);font-weight:600;background:transparent}
+.add-open:hover{background:var(--surface-2)}
+.addform .two{display:grid;grid-template-columns:2fr 1fr;gap:8px}
+.addform .go{display:flex;gap:8px;align-items:center}
+.ferr{color:var(--red-text);font-size:13px;min-height:0}
+.ferr:empty{display:none}
+.loading{color:var(--muted);text-align:center;padding:40px 0}
 @media (max-width:520px){
-  main{padding:20px 14px 56px}
-  .card{padding:16px 14px 14px;border-radius:14px}
-  .addwish .two,.wedit .two{grid-template-columns:1fr}
-  .sprig{font-size:38px}
-}
-@media (prefers-reduced-motion: reduce){
-  *{transition:none!important}
+  .wrap{padding:24px 22px 80px}
+  .addform .two{grid-template-columns:1fr}
+  .wish{gap:10px}
 }
 
-/* ---------- Gavelisten: sign-in, groups ---------- */
+/* ---------- Gavelisten only: sign-in, display name, groups ---------- */
 [hidden]{display:none!important}
-input[type=email]{border:1px solid var(--line);background:var(--bg);border-radius:9px;padding:9px 11px;min-width:0;width:100%}
-input[type=email]:focus{outline:2px solid var(--green);outline-offset:-1px;border-color:transparent}
-input[readonly]{color:var(--muted)}
-select{font:inherit;color:inherit;border:1px solid var(--line);background:var(--bg);border-radius:9px;padding:7px 10px;min-width:0;max-width:100%}
-.groupbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;margin:18px 0 0}
-.groupbar select{flex:0 1 260px;font-weight:600}
-.groupbar .who{margin-left:auto;color:var(--muted);font-size:.88rem;overflow-wrap:anywhere}
-.banner.ok{background:var(--surface-2);color:var(--green-text)}
-.panel{background:var(--surface);border-radius:16px;padding:18px;margin:18px 0}
-.panel h2{font-size:1.4rem;font-weight:700;margin:0 0 6px;letter-spacing:-.01em;overflow-wrap:anywhere}
-.panel h3{font-size:1rem;font-weight:600;margin:18px 0 6px}
+.groupbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;margin:0 0 18px}
+.groupbar select{flex:0 1 260px;font-weight:600;border:1px solid var(--line);background:var(--surface);color:var(--text);border-radius:10px;padding:7px 10px;min-width:0;max-width:100%}
+.groupbar .who{margin-left:auto;color:var(--muted);font-size:13px;overflow-wrap:anywhere}
+.panel{background:var(--surface);border:2px solid var(--card-stroke);border-radius:16px;box-shadow:var(--shadow);padding:16px;margin:0 0 18px}
+.panel h2{font-size:22px;font-weight:700;margin:0 0 6px;overflow-wrap:anywhere}
+.panel h3{font-size:15px;font-weight:600;margin:18px 0 6px}
 .panel p{margin:0 0 10px}
-.panel .hint{color:var(--muted);font-size:.92rem}
+.panel .hint{color:var(--muted);font-size:14px}
 .panel form{display:grid;gap:8px}
-.panel .go{justify-self:start}
-.panel .confirm-box{margin:8px 0}
-.panel-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px}
-.panel-head h2{margin:0}
-.panel-head .card-actions{margin-left:auto;display:flex;gap:2px}
+.panel .confirm{margin:8px 0}
+.panel-head{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px}
+.panel-head h2{margin:0;flex:1;min-width:0}
+.panel-head .actions{display:flex;gap:2px}
 .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-.row input{flex:1 1 220px}
-.copied{color:var(--green-text);font-size:.88rem;margin:6px 0 0}
+.row input{flex:1 1 220px;width:auto}
+.rename-row{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end}
+.rename-row .field{flex:1 1 200px}
+.copied{color:var(--muted);font-size:13px;margin:6px 0 0}
 .copied:empty{display:none}
+input[readonly]{color:var(--muted)}
 ul.members{list-style:none;margin:0;padding:0}
 ul.members li{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;padding:8px 0;border-top:1px solid var(--line)}
 ul.members li:first-child{border-top:0}
 ul.members .mname{font-weight:500;overflow-wrap:anywhere}
-ul.members .tag{color:var(--muted);font-size:.85rem}
+ul.members .tag{color:var(--muted);font-size:13px}
 ul.members .mact{margin-left:auto}
-ul.members .confirm-box{flex-basis:100%;margin:4px 0 0}
+ul.members .confirm{flex-basis:100%;margin:4px 0 0}
 .panel-foot{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px;padding-top:14px;border-top:1px dashed var(--line)}
-.panel-foot .confirm-box{flex-basis:100%;margin:0}
+.panel-foot .confirm{flex-basis:100%;margin:0}
+@media (prefers-reduced-motion: reduce){
+  *{transition:none!important;animation:none!important}
+}
 </style>
 </head>
 <body>
-<main>
-  <header class="top">
-    <span class="sprig" aria-hidden="true">🎄</span>
-    <div>
-      <h1>Gavelisten</h1>
-      <p class="summary" id="summary">Henter listen …</p>
-    </div>
-  </header>
+<main class="wrap">
+  <div class="top">
+    <h1><span class="star" aria-hidden="true">🎄</span><span class="ttl"><span>Gavelisten</span><span class="year">2026</span></span></h1>
+    <div class="theme" role="group" aria-label="Tema"><button type="button" data-t="light" aria-label="Lyst tema" title="Lyst tema"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></button><button type="button" data-t="dark" aria-label="Mørkt tema" title="Mørkt tema"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></button></div>
+  </div>
+  <p class="lead">Kryss av det du har kjøpt, så blir ingenting kjøpt to ganger.</p>
 
   <div class="groupbar" id="groupbar" hidden>
     <label class="sr" for="groupSelect">Velg gruppe</label>
     <select id="groupSelect"></select>
-    <button class="btn ghost small" id="panelBtn" type="button" aria-expanded="false" aria-controls="groupPanel">Inviter og medlemmer</button>
+    <button class="btn" id="panelBtn" type="button" aria-expanded="false" aria-controls="groupPanel">Inviter og medlemmer</button>
     <span class="who" id="who"></span>
-    <button class="linkbtn" id="signOut" type="button">Logg ut</button>
+    <button class="btn ghost" id="signOut" type="button">Logg ut</button>
   </div>
 
-  <div class="toolbar" id="toolbar" hidden>
-    <button class="switch" id="hideToggle" role="switch" aria-checked="false" type="button">
-      <span class="track"></span><span class="lbl">Skjul hva som er kjøpt (kun for deg)</span>
-    </button>
-  </div>
-
-  <div class="banner" id="banner" role="status" hidden></div>
+  <div class="banner" id="banner" hidden></div>
 
   <!-- Sign in with e-mail link -->
   <section class="panel" id="authView" hidden aria-labelledby="authTitle">
@@ -267,15 +254,16 @@ ul.members .confirm-box{flex-basis:100%;margin:4px 0 0}
       <p class="hint" id="authInvited" hidden>Du er invitert til en gruppe. Logg inn, så blir du med.</p>
       <p>Skriv inn e-postadressen din, så sender vi deg en lenke du logger inn med. Du trenger ikke passord.</p>
       <form id="authForm" novalidate>
-        <input type="email" id="authEmail" placeholder="E-postadresse" aria-label="E-postadresse" autocomplete="email" inputmode="email" maxlength="254">
-        <button class="btn go" id="authGo" type="submit">Send innloggingslenke</button>
-        <p class="err" id="authErr" aria-live="polite"></p>
+        <label class="field"><span class="lbl">E-postadresse</span>
+          <input type="email" id="authEmail" placeholder="navn@eksempel.no" autocomplete="email" inputmode="email" maxlength="254"></label>
+        <div><button class="btn primary" id="authGo" type="submit">Send innloggingslenke</button></div>
+        <div class="ferr" id="authErr" role="alert"></div>
       </form>
     </div>
     <div id="authSent" hidden>
       <p id="authSentText"></p>
       <p class="hint">Åpne lenken i denne nettleseren hvis du kan. Finner du ikke e-posten, sjekk søppelpost.</p>
-      <button class="btn ghost small" id="authAgain" type="button">Bruk en annen e-postadresse</button>
+      <button class="btn" id="authAgain" type="button">Bruk en annen e-postadresse</button>
     </div>
   </section>
 
@@ -284,23 +272,25 @@ ul.members .confirm-box{flex-basis:100%;margin:4px 0 0}
     <h2 id="nameTitle">Hva skal de andre se deg som?</h2>
     <p class="hint">Navnet vises for de andre i gruppene dine, for eksempel når du har kjøpt noe.</p>
     <form id="nameForm" novalidate>
-      <input type="text" id="nameInput" placeholder="Navnet ditt" aria-label="Navnet ditt" maxlength="60" autocomplete="given-name">
-      <button class="btn go" id="nameGo" type="submit">Lagre</button>
-      <p class="err" id="nameErr" aria-live="polite"></p>
+      <label class="field"><span class="lbl">Navnet ditt</span>
+        <input type="text" id="nameInput" placeholder="F.eks. Kari Hansen" maxlength="60" autocomplete="name"></label>
+      <div><button class="btn primary" id="nameGo" type="submit">Lagre</button></div>
+      <div class="ferr" id="nameErr" role="alert"></div>
     </form>
   </section>
 
   <!-- Create a group -->
   <section class="panel" id="createView" hidden aria-labelledby="createTitle">
     <h2 id="createTitle">Lag en gruppe</h2>
-    <p class="hint" id="createIntro">Du er ikke med i noen gruppe ennå. Lag en gruppe for familien eller vennegjengen, og inviter de andre med en lenke. Har noen allerede laget en gruppe, kan du be om invitasjonslenken og åpne den, så blir du med.</p>
+    <p class="hint" id="createIntro"></p>
     <form id="createForm" novalidate>
-      <input type="text" id="createName" placeholder="Navn på gruppen, for eksempel Familien Hansen" aria-label="Navn på gruppen" maxlength="60" autocomplete="off">
+      <label class="field"><span class="lbl">Navn på gruppen</span>
+        <input type="text" id="createName" placeholder="F.eks. Familien Hansen" maxlength="60" autocomplete="off"></label>
       <div class="row">
-        <button class="btn" id="createGo" type="submit">Lag gruppe</button>
-        <button class="btn ghost" id="createCancel" type="button">Avbryt</button>
+        <button class="btn primary" id="createGo" type="submit">Lag gruppe</button>
+        <button class="btn" id="createCancel" type="button">Avbryt</button>
       </div>
-      <p class="err" id="createErr" aria-live="polite"></p>
+      <div class="ferr" id="createErr" role="alert"></div>
     </form>
   </section>
 
@@ -308,22 +298,23 @@ ul.members .confirm-box{flex-basis:100%;margin:4px 0 0}
   <section class="panel" id="groupPanel" hidden aria-labelledby="groupTitle">
     <div class="panel-head" id="groupHead">
       <h2 id="groupTitle"></h2>
-      <div class="card-actions" id="groupHeadActions"></div>
+      <div class="actions" id="groupHeadActions"></div>
     </div>
     <div id="groupRename" hidden>
       <div class="rename-row">
-        <input type="text" id="groupRenameInput" aria-label="Nytt navn på gruppen" maxlength="60" autocomplete="off">
-        <button class="btn small" id="groupRenameSave" type="button">Lagre</button>
-        <button class="btn ghost small" id="groupRenameCancel" type="button">Avbryt</button>
+        <label class="field"><span class="lbl">Nytt navn på gruppen</span>
+          <input type="text" id="groupRenameInput" maxlength="60" autocomplete="off"></label>
+        <button class="btn primary" id="groupRenameSave" type="button">Lagre</button>
+        <button class="btn" id="groupRenameCancel" type="button">Avbryt</button>
       </div>
-      <p class="err" id="groupRenameErr" aria-live="polite"></p>
+      <div class="ferr" id="groupRenameErr" role="alert"></div>
     </div>
 
     <h3>Inviter flere</h3>
     <p class="hint">Alle som har denne lenken, kan bli med i gruppen og se og endre listene. Del den bare med dem som skal være med.</p>
     <div class="row">
       <input type="text" id="inviteLink" readonly aria-label="Invitasjonslenke">
-      <button class="btn small" id="copyInvite" type="button">Kopier lenke</button>
+      <button class="btn primary" id="copyInvite" type="button">Kopier lenke</button>
     </div>
     <p class="copied" id="copyStatus" aria-live="polite"></p>
     <div id="regenArea"></div>
@@ -335,21 +326,28 @@ ul.members .confirm-box{flex-basis:100%;margin:4px 0 0}
   </section>
 
   <div id="listView" hidden>
-    <nav class="pills" id="pills" aria-label="Filtrer etter person"></nav>
-
-    <button class="btn small add-btn" id="addPersonBtn" type="button"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>Legg til person</button>
-
-    <div class="add-person" id="addPerson" hidden>
-      <input type="text" id="newPersonName" placeholder="Navn" aria-label="Navn på personen" maxlength="60" autocomplete="off">
-      <button class="btn" id="savePerson" type="button">Legg til</button>
-      <button class="btn ghost" id="cancelPerson" type="button">Avbryt</button>
-      <p class="err" id="personErr" style="flex-basis:100%"></p>
+    <div class="toolbar">
+      <div class="filters" id="filters" role="group" aria-label="Filtrer på person"></div>
+      <div class="row-between">
+        <label class="switch">
+          <input type="checkbox" id="hideToggle">
+          <span class="track" aria-hidden="true"></span>
+          <span>Skjul hva som er kjøpt (kun for deg)</span>
+        </label>
+        <button class="btn primary" id="addPersonBtn" type="button">+ Legg til person</button>
+      </div>
+      <form class="add-person" id="addPersonForm" hidden novalidate>
+        <input type="text" id="newPersonName" placeholder="Navn" maxlength="60" autocomplete="off" aria-label="Navn på ny person">
+        <button class="btn primary" type="submit" id="savePerson">Legg til</button>
+        <button class="btn" type="button" id="cancelAddPerson">Avbryt</button>
+      </form>
+      <div class="ferr" id="addPersonErr" role="alert"></div>
     </div>
 
     <div id="cards"></div>
   </div>
 
-  <p class="state" id="state">Henter listen …</p>
+  <p class="loading" id="state">Henter listen …</p>
 </main>
 
 <script src="config.js"></script>

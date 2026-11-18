@@ -5,3 +5,4 @@ node_modules/
 supabase/.temp/
 supabase/.branches/
 original-artifact.html
+reference-v3.html

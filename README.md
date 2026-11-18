@@ -1,10 +1,12 @@
 # Gavelisten
 
 A shared wish list for families and groups of friends. Each group has cards
-per person with wishes (title, optional link and price). Anyone in the group
-can tick a wish as bought ("Kjøpt av X, i dag 14:05"), and each viewer can
-hide what has been bought, so the person the gifts are for can use the list
-too. The interface is in Norwegian.
+per person with wishes (title, optional link, price, quantity and photo).
+Anyone in the group can tick a wish as bought ("Kjøpt av X, i dag 14:05"),
+or for a wish with a quantity (8 glasses) register how many they bought
+themselves. Each viewer can hide what has been bought, so the person the
+gifts are for can use the list too. Only one person can edit a wish at a
+time. The interface is in Norwegian.
 
 It is a static site (plain HTML, CSS and JavaScript, no build step) meant for
 GitHub Pages, with [Supabase](https://supabase.com) for the database, sign-in
@@ -16,19 +18,28 @@ GitHub Pages, with [Supabase](https://supabase.com) for the database, sign-in
 |------|------------|
 | `index.html` | Page markup and styles |
 | `app.js` | All app logic |
-| `config.js` | Supabase project URL and anon key (you fill these in) |
+| `theme.js` | Applies the saved light or dark theme before the page paints |
+| `config.js` | Supabase project URL and publishable (anon) key |
 | `supabase/migrations/0001_init.sql` | Database schema, row level security, RPCs, realtime |
-| `tests/rls.sql` | Checks for the security rules, run against a local Supabase |
+| `supabase/migrations/0002_v3.sql` | Quantities, purchases per person, images (Storage bucket), edit locks |
+| `tests/rls.sql` | Checks for the 0001 security rules, run against a local Supabase |
+| `tests/rls_v3.sql` | Checks for the 0002 rules (purchases, locks, images, moving wishes) |
 
 ## Setup
 
 ### 1. Create the database
 
 1. Create a Supabase project.
-2. Run `supabase/migrations/0001_init.sql`, either in the dashboard
-   (SQL Editor, paste and run) or with the CLI: `supabase init` (once, it
-   adds `supabase/config.toml`), `supabase link --project-ref <ref>` and
-   then `supabase db push`.
+2. Run the migrations in order, `supabase/migrations/0001_init.sql` and then
+   `supabase/migrations/0002_v3.sql`, either in the dashboard (SQL Editor,
+   paste and run) or with the CLI: `supabase init` (once, it adds
+   `supabase/config.toml`), `supabase link --project-ref <ref>` and then
+   `supabase db push`. Never edit a migration that has already been
+   applied; add a new numbered file instead.
+
+   `0002_v3.sql` also creates the private Storage bucket `wish-images`
+   (5 MB per file, JPEG, PNG or WebP) and its access policies, so there is
+   nothing to set up by hand under Storage. It is safe to run twice.
 
 ### 2. Configure sign-in
 
@@ -100,10 +111,34 @@ To try it locally, serve the folder with any static server, for example
 - A wish's person must belong to the same group (composite foreign key).
 - Table privileges are per column, so clients cannot change ids, group
   membership of rows, owners or buyers directly.
+- Who bought how many of a wish with a quantity is stored per person in
+  `wish_purchases`. Everyone in the group can read it, but you can only add,
+  change or remove your own row, and the time is set by the server. A
+  trigger refuses buying more than the wish's quantity (a wish ticked with
+  the single "Kjøpt" checkbox counts as one). Lowering the quantity keeps
+  what was already bought; the wish then just shows as all bought.
+- Images live in the private Storage bucket `wish-images` as
+  `<group id>/<random id>.jpg`. Storage policies only let members of that
+  group read, upload or delete them, and the page shows them through signed
+  URLs that expire after an hour. The browser scales photos to at most
+  1600 px and uploads them as JPEG. Old images are deleted by the page when
+  they are replaced or removed, or when the wish or person card is deleted.
+  When a whole group is deleted (the last member leaves), its images are
+  not deleted automatically; remove the group's folder in the dashboard if
+  that matters.
+- Edit locks (`wish_locks`) can only be taken through the
+  `acquire_wish_lock` function, which takes a lock only when it is free,
+  expired or already yours. Locks are a courtesy to avoid two people
+  editing the same wish; the database does not refuse a change from
+  someone without the lock.
+- Members only ever see each other's display names, never e-mail
+  addresses. Avatars show initials from the display name.
 - The page has a Content Security Policy that only allows scripts from the
   site itself and the pinned supabase-js build on jsDelivr (with a
-  Subresource Integrity hash), and network calls only to `*.supabase.co`. If
-  you use a custom Supabase domain, update `connect-src` in `index.html`.
+  Subresource Integrity hash), network calls only to `*.supabase.co`, and
+  images only from the site, `blob:` (previews) and `*.supabase.co` (signed
+  URLs). If you use a custom Supabase domain, update `connect-src` and
+  `img-src` in `index.html`.
 - User text is always inserted with `textContent`, never as HTML, and links
   are limited to `http://` and `https://`.
 
@@ -111,24 +146,40 @@ Sign-in uses the implicit magic link flow, so the link works even when it is
 opened in a different browser than the one it was requested from (common
 when the e-mail is read on a phone).
 
+## Editing and locks
+
+Clicking a wish (or ✏️) opens it for editing and takes a lock, so the others
+see "Bjørn Hansen redigerer" with an avatar and cannot open or delete it until
+it is free. Ticking it as bought still works. The lock is renewed while you
+type (at most every 20 seconds) and lasts 8 minutes from the last renewal.
+After 7 minutes without activity the page saves and closes the editor itself,
+with a red countdown in the last minute. The lock is released on Lagre,
+Avbryt, Esc, a click outside, and when the tab is closed (a `keepalive`
+request to the `release_wish_lock` endpoint). If a tab dies without
+releasing, the lock simply expires.
+
 ## Live updates
 
-The page subscribes to Supabase Realtime changes on `people`, `wishes` and
-`group_members` filtered on the current group, and refetches the group's data
-when anything changes. Postgres cannot filter delete events by column, so
+The page subscribes to Supabase Realtime changes on `people`, `wishes`,
+`group_members`, `wish_purchases` and `wish_locks` filtered on the current
+group, and refetches the group's data when anything changes. Forms that are
+open keep what has been typed. Postgres cannot filter delete events by column, so
 every open page gets notified of every delete (only the row id, no content)
 and refetches. That is fine at family scale.
 
 ## Testing the database rules
 
-`tests/rls.sql` checks the policies, RPCs and triggers as different users,
-inside a transaction that is rolled back. With the Supabase CLI and Docker:
+`tests/rls.sql` and `tests/rls_v3.sql` check the policies, RPCs, triggers and
+Storage policies as different users, each inside a transaction that is rolled
+back. With the Supabase CLI and Docker:
 
 ```sh
 supabase init             # once, if supabase/config.toml does not exist yet
 supabase start
-supabase db reset          # applies the migration
+supabase db reset          # applies both migrations
 psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f tests/rls.sql
+psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f tests/rls_v3.sql
 ```
 
-It ends with `ALL RLS CHECKS PASSED`, or stops at the first failed check.
+They end with `ALL RLS CHECKS PASSED` and `ALL V3 RLS CHECKS PASSED`, or stop
+at the first failed check.
